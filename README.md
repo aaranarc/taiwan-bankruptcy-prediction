@@ -4,7 +4,8 @@ An XGBoost-powered corporate bankruptcy prediction system benchmarked against
 the classical Altman Z-Score, interpreted with SHAP, and deployed as an 
 interactive Streamlit dashboard.
 
-🔗 **[Live Demo](https://taiwan-bankruptcy-prediction.streamlit.app/)**
+**[Live Demo](https://taiwan-bankruptcy-prediction.streamlit.app/)**
+![Dashboard](assets/asset.png)
 
 ---
 
