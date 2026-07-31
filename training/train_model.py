@@ -1,10 +1,3 @@
-"""
-train_and_save.py — Standalone training script for Taiwan Bankruptcy Prediction.
-
-Replicates the notebook pipeline and saves all model artifacts to models/.
-Run once: python train_and_save.py
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -15,25 +8,24 @@ from xgboost import XGBClassifier
 import warnings
 warnings.filterwarnings('ignore')
 
+from training.train_utils import get_extreme_columns, apply_winsorization
 
 def main():
     print("=" * 60)
     print("Taiwan Bankruptcy Prediction — Model Training")
     print("=" * 60)
 
-    # ------------------------------------------------------------------
     # 1. Load data
-    # ------------------------------------------------------------------
-    data_path = os.path.join(os.path.dirname(__file__), 'data', 'raw', 'data.csv')
+    data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raw', 'data.csv')
+    if not os.path.exists(data_path):
+        print(f"❌ Data file not found at {data_path}")
+        return
+        
     df = pd.read_csv(data_path)
     df.columns = df.columns.str.strip()
     print(f"\n✅ Loaded data: {df.shape[0]} rows × {df.shape[1]} columns")
-    print(f"   Bankrupt: {(df['Bankrupt?'] == 1).sum()} ({(df['Bankrupt?'] == 1).mean()*100:.2f}%)")
-    print(f"   Healthy:  {(df['Bankrupt?'] == 0).sum()} ({(df['Bankrupt?'] == 0).mean()*100:.2f}%)")
 
-    # ------------------------------------------------------------------
     # 2. Train/test split
-    # ------------------------------------------------------------------
     x = df.drop(columns=['Bankrupt?'])
     y = df['Bankrupt?']
     x_train, x_test, y_train, y_test = train_test_split(
@@ -41,25 +33,12 @@ def main():
     )
     print(f"\n✅ Train/test split: {x_train.shape[0]} train / {x_test.shape[0]} test")
 
-    # ------------------------------------------------------------------
-    # 3. Winsorization (bounds from training data only)
-    # ------------------------------------------------------------------
-    feature_cols = [c for c in x_train.select_dtypes(include='number').columns]
-    extreme_cols = [c for c in feature_cols if x_train[c].max() > 100]
-
-    winsorize_bounds_dict = {}
-    for col in extreme_cols:
-        lb = x_train[col].quantile(0.01)
-        ub = x_train[col].quantile(0.99)
-        winsorize_bounds_dict[col] = (lb, ub)
-        x_train[col] = x_train[col].clip(lower=lb, upper=ub)
-        x_test[col] = x_test[col].clip(lower=lb, upper=ub)
-
+    # 3. Winsorization
+    extreme_cols = get_extreme_columns(x_train)
+    x_train, x_test, winsorize_bounds_dict = apply_winsorization(x_train, x_test, extreme_cols)
     print(f"✅ Winsorized {len(extreme_cols)} columns with extreme outliers")
 
-    # ------------------------------------------------------------------
     # 4. Scaling
-    # ------------------------------------------------------------------
     scaler = RobustScaler()
     x_train_scaled = scaler.fit_transform(x_train)
     x_test_scaled = scaler.transform(x_test)
@@ -68,16 +47,14 @@ def main():
     x_test = pd.DataFrame(x_test_scaled, columns=x.columns)
     print("✅ RobustScaler fitted and applied")
 
-    # ------------------------------------------------------------------
     # 5. GridSearchCV for XGBoost
-    # ------------------------------------------------------------------
     print("\n🔍 Running GridSearchCV (this may take a few minutes)...")
     param_grid = {
-        'n_estimators': [100, 200, 300],
-        'learning_rate': [0.01, 0.1, 0.2],
-        'max_depth': [3, 5, 7],
-        'subsample': [0.7, 0.9],
-        'colsample_bytree': [0.7, 0.9]
+        'n_estimators': [100, 200],
+        'learning_rate': [0.1, 0.2],
+        'max_depth': [3, 5],
+        'subsample': [0.9],
+        'colsample_bytree': [0.9]
     }
     xgb_model = XGBClassifier(random_state=42, eval_metric='logloss')
 
@@ -95,9 +72,7 @@ def main():
     print(f"\n✅ Best parameters: {best_params}")
     print(f"   Best ROC-AUC (CV): {grid_search.best_score_:.4f}")
 
-    # ------------------------------------------------------------------
     # 6. Train final model with scale_pos_weight
-    # ------------------------------------------------------------------
     scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
 
     xgb = XGBClassifier(
@@ -108,7 +83,7 @@ def main():
     )
     xgb.fit(x_train, y_train)
 
-    # Quick evaluation
+    # Evaluation
     from sklearn.metrics import roc_auc_score, average_precision_score, classification_report
     xgb_prob = xgb.predict_proba(x_test)[:, 1]
     xgb_pred = xgb.predict(x_test)
@@ -118,25 +93,21 @@ def main():
     print(f"\n✅ Final XGBoost model trained")
     print(f"   ROC-AUC: {roc_auc:.4f}")
     print(f"   PR-AUC:  {pr_auc:.4f}")
-    print(f"\n{classification_report(y_test, xgb_pred, target_names=['Healthy', 'Bankrupt'])}")
 
-    # ------------------------------------------------------------------
-    # 7. Compute SHAP values on test set for global importance
-    # ------------------------------------------------------------------
+    # 7. Compute SHAP values
     print("🔍 Computing SHAP values for global feature importance...")
     import shap
     explainer = shap.TreeExplainer(xgb)
     shap_values = explainer.shap_values(x_test)
     print("✅ SHAP values computed")
 
-    # ------------------------------------------------------------------
-    # 8. Save all artifacts
-    # ------------------------------------------------------------------
-    models_dir = os.path.join(os.path.dirname(__file__), 'models')
+    # 8. Save all artifacts to app/models/
+    models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'app', 'models')
     os.makedirs(models_dir, exist_ok=True)
 
     artifacts = {
         'xgb_final_model.pkl': xgb,
+        'model.joblib': xgb, # copy model to model.joblib
         'robust_scaler.pkl': scaler,
         'winsorize_bounds.pkl': winsorize_bounds_dict,
         'feature_names.pkl': list(x.columns),

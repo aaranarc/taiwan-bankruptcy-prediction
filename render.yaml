@@ -1,0 +1,26 @@
+services:
+  # 1. FastAPI Backend Service
+  - type: web
+    name: bankruptcy-predictor-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+
+  # 2. Streamlit Frontend Service
+  - type: web
+    name: bankruptcy-predictor-ui
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: BACKEND_URL
+        sync: false
