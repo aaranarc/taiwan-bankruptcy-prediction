@@ -4,7 +4,7 @@ An XGBoost-powered corporate bankruptcy prediction system benchmarked against th
 
 **[Live Demo Link](https://bankruptcy-predictor-ui.onrender.com/)**
 
-![Dashboard Screenshot](assets/assets.png)
+![Dashboard Screenshot](assets/asset.png)
 
 ---
 
