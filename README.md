@@ -1,19 +1,21 @@
-# Taiwan Bankruptcy Prediction
+# Corporate Bankruptcy Prediction System
 
-An XGBoost-powered corporate bankruptcy prediction system benchmarked against 
-the classical Altman Z-Score, interpreted with SHAP, and deployed as an 
-interactive Streamlit dashboard.
+An XGBoost-powered corporate bankruptcy prediction system benchmarked against the classical Altman Z-Score, interpreted with SHAP, utilizing Redis caching, and integrated with Supabase database for user authentication and prediction history logging.
 
-**[Live Demo](https://taiwan-bankruptcy-prediction.streamlit.app/)**
-![Dashboard](assets/asset.png)
+**[Live Demo Link](https://bankruptcy-predictor-ui.onrender.com/)**
+
+![Dashboard Screenshot](assets/asset.png)
 
 ---
 
-## Overview
+## Architecture Overview
 
-Trained on 6,819 Taiwanese company filings (1999–2009), this system predicts 
-bankruptcy risk from 95 financial ratios and explains every prediction using 
-SHAP waterfall plots — making risk decisions auditable, not just accurate.
+This decoupled application separates frontend presentation from model inference and database layers:
+
+- **Streamlit UI**: Pure presentation layer. Communicates with the backend exclusively via JSON HTTP APIs with JWT bearer authentication.
+- **FastAPI Backend**: Hosts the XGBoost classifier pipeline, handles password hashing and JWT validation, interacts with Supabase, and manages Redis caching.
+- **Redis Cache**: Caches predictions to bypass model inference for identical inputs.
+- **Supabase Postgres**: Stores hashed user credentials and historical predictions.
 
 ---
 
@@ -27,44 +29,82 @@ SHAP waterfall plots — making risk decisions auditable, not just accurate.
 | RF + SMOTE | 0.95 | 0.48 | 57% |
 | **XGBoost + SMOTE (final)** | **0.94** | **0.52** | **68%** |
 
-> Altman Z-Score fails on this dataset (ROC-AUC 0.09) — thresholds calibrated 
-> for 1960s US manufacturing firms do not transfer to Taiwanese companies. 
-> This validates the data-driven ML approach.
-
----
-
-## Key Findings
-
-- **Total debt/Total net worth** is the single strongest bankruptcy predictor — 
-  leverage dominates over profitability signals
-- **SMOTE** outperformed class weights for handling 97:3 class imbalance
-- Optimal decision threshold tuned to **0.20** under credit risk context 
-  (false negatives costlier than false positives)
-- Altman Z-Score misclassified 6,813/6,819 companies as Safe — 
-  confirming poor cross-market transferability
-
----
-
-## Methodology
-
-1. **EDA** — 95 features grouped into 7 financial categories 
-   (Liquidity, Profitability, Leverage, Activity, Cash Flow, Growth, Per Share)
-2. **Preprocessing** — Winsorization at 1st/99th percentile → RobustScaler
-3. **Baseline** — Logistic Regression + Random Forest, no imbalance handling
-4. **Imbalance handling** — SMOTE, class weights, threshold tuning
-5. **Final model** — XGBoost with scale_pos_weight + threshold 0.20
-6. **Benchmark** — Altman Z-Score (1968) manual implementation
-7. **Explainability** — SHAP TreeExplainer, global + local waterfall plots
-
----
-
-## Dataset
-
-**UCI Taiwanese Economic Journal (Liang et al., 2016)**
-- 6,819 companies × 95 financial ratio features
-- Target: `Bankrupt?` — severely imbalanced (3.23% positive)
-- Source: [UCI ML Repository](https://archive.ics.uci.edu/dataset/572/taiwanese+bankruptcy+prediction)
+> **Note**: Altman Z-Score fails on this dataset (ROC-AUC 0.09) because thresholds calibrated for 1960s US manufacturing firms do not directly transfer to Taiwanese firms. This highlights the necessity of a modern data-driven ML approach.
 
 ---
 
 ## Project Structure
+
+```text
+app/
+├── __init__.py
+├── main.py                     # Entry point combining routers, middlewares, and CORS
+├── models/
+│   ├── model.joblib            # Serialized XGBoost ML model
+│   └── robust_scaler.pkl, winsorize_bounds.pkl, etc.
+├── api/
+│   ├── routes_predict.py       # Predict endpoints with Redis & Supabase prediction logging
+│   └── routes_auth.py          # /auth/signup & /auth/login with Supabase users
+├── core/
+│   ├── config.py               # Env var loading via dotenv
+│   ├── security.py             # Password hashing (bcrypt) & JWT token helpers
+│   ├── dependencies.py         # DB (Supabase client) and Current User retrieval
+│   └── exceptions.py           # Custom exception handler classes
+├── services/
+│   └── model_service.py        # Pipeline: load artifacts, winsorize, scale, predict, compute Altman Z
+├── middleware/
+│   └── logging_middleware.py   # Global HTTP request/response logging
+├── cache/
+│   └── redis_cache.py          # Redis client cache helper
+└── utils/
+    └── logger.py               # Clean stdout logging formatter
+streamlit_app.py                # Streamlit UI client
+training/
+├── __init__.py
+├── train_utils.py              # Winsorization & scaling helper functions
+└── train_model.py              # XGBoost training pipeline script (outputs to app/models/)
+```
+
+---
+
+## Setup & Running Locally
+
+### 1. Configure the Environment
+Create a `.env` file at the root of the project:
+```ini
+SUPABASE_URL=https://your-supabase-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key
+REDIS_URL=redis://localhost:6379
+JWT_SECRET_KEY=your-custom-jwt-signing-secret
+```
+
+### 2. Prepare Database Tables
+Run the following SQL in your Supabase SQL Editor:
+```sql
+create table users (
+    id uuid default gen_random_uuid() primary key,
+    email text unique not null,
+    password_hash text not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table predictions (
+    id uuid default gen_random_uuid() primary key,
+    user_id uuid references users(id) on delete cascade not null,
+    input_features jsonb not null,
+    prediction_result jsonb not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+```
+
+### 3. Start the Backend API
+```bash
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### 4. Start the Frontend UI
+```bash
+export BACKEND_URL="http://localhost:8000"
+streamlit run streamlit_app.py
+```
