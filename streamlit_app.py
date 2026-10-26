@@ -354,6 +354,10 @@ elif page in ["🔍 Predict Bankruptcy", "🔍 Predict (Guest Mode)"]:
                         )
                     else:
                         st.warning("Altman Z-Score features were not fully supplied.")
+
+                if res.get("top_factors"):
+                    st.markdown("#### Top factors behind this prediction (SHAP)")
+                    st.dataframe(pd.DataFrame(res["top_factors"]), use_container_width=True, hide_index=True)
                         
                 if st.session_state["token"]:
                     st.toast("💾 Prediction saved automatically to your profile in Supabase.")

@@ -20,6 +20,12 @@ class PredictionInput(BaseModel):
         description="Dictionary of features where keys match the dataset columns."
     )
 
+class TopFactor(BaseModel):
+    feature: str
+    value: float
+    shap: float
+    direction: str
+
 class PredictionResponse(BaseModel):
     probability: float
     prediction: int
@@ -30,13 +36,14 @@ class PredictionResponse(BaseModel):
     altman_zone: Optional[str] = None
     altman_emoji: Optional[str] = None
     altman_color: Optional[str] = None
+    top_factors: Optional[List[TopFactor]] = None
     cached: bool
 
-def get_cache_key(features: Dict[str, float]) -> str:
-    """Generate a unique MD5 hash based on sorted feature key-values."""
+def get_cache_key(features: Dict[str, float], model_version: str) -> str:
+    """Generate a unique MD5 hash based on sorted feature key-values, scoped to the model version."""
     sorted_features = sorted(features.items())
     features_str = json.dumps(sorted_features)
-    return f"predict:{hashlib.md5(features_str.encode('utf-8')).hexdigest()}"
+    return f"predict:{model_version}:{hashlib.md5(features_str.encode('utf-8')).hexdigest()}"
 
 @router.get("/features", response_model=List[str])
 def get_features():
@@ -66,7 +73,7 @@ def predict(
             detail=f"Missing required features: {missing}"
         )
 
-    cache_key = get_cache_key(payload.features)
+    cache_key = get_cache_key(payload.features, model_service.model_version)
     
     # Try fetching from Redis cache
     cached_data = redis_cache.get(cache_key)
