@@ -90,8 +90,10 @@ Create a `.env` file at the root of the project:
 SUPABASE_URL=https://your-supabase-project.supabase.co
 SUPABASE_KEY=your-supabase-anon-key
 REDIS_URL=redis://localhost:6379
-JWT_SECRET_KEY=your-custom-jwt-signing-secret
+JWT_SECRET_KEY=your-custom-jwt-signing-secret   # required: the API refuses to start without it
+ALLOWED_ORIGINS=http://localhost:8501           # optional: comma-separated CORS origins (default shown)
 ```
+Generate a secret with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. The Streamlit UI calls the API server-to-server, so CORS only matters for browser clients.
 
 ### 2. Prepare Database Tables
 Run the following SQL in your Supabase SQL Editor:
