@@ -1,5 +1,7 @@
 import os
+import hashlib
 import joblib
+import shap
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Any, Optional
@@ -12,6 +14,8 @@ MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
 class ModelService:
     def __init__(self):
         self.artifacts = {}
+        self.explainer = None
+        self.model_version = "unknown"
         self.load_artifacts()
 
     def load_artifacts(self):
@@ -34,6 +38,15 @@ class ModelService:
             else:
                 self.artifacts[key] = None
                 logger.warning(f"Model artifact not found at {path}")
+
+        model_path = os.path.join(MODELS_DIR, file_map['model'])
+        if self.artifacts['model'] is not None:
+            with open(model_path, 'rb') as fh:
+                self.model_version = hashlib.sha256(fh.read()).hexdigest()[:8]
+            try:
+                self.explainer = shap.TreeExplainer(self.artifacts['model'])
+            except Exception as e:
+                logger.warning(f"SHAP explainer unavailable; predictions will omit top_factors: {e}")
 
     def get_feature_names(self) -> List[str]:
         return self.artifacts.get("feature_names", [])
@@ -78,6 +91,7 @@ class ModelService:
 
         prob = float(probabilities[0])
         pred = int(predictions[0])
+        top_factors = self.top_factors(df_proc, features) if self.explainer else None
 
         if prob < 0.15:
             risk_tier = 'Low Risk'
@@ -140,7 +154,21 @@ class ModelService:
             "altman_zone": altman_zone,
             "altman_emoji": altman_emoji,
             "altman_color": altman_color,
+            "top_factors": top_factors,
         }
+
+    def top_factors(self, df_proc: pd.DataFrame, features: Dict[str, float], k: int = 5) -> List[Dict[str, Any]]:
+        shap_row = np.asarray(self.explainer.shap_values(df_proc))[0]
+        top = np.argsort(-np.abs(shap_row))[:k]
+        return [
+            {
+                "feature": df_proc.columns[i],
+                "value": float(features[df_proc.columns[i]]),
+                "shap": float(shap_row[i]),
+                "direction": "raises risk" if shap_row[i] > 0 else "lowers risk",
+            }
+            for i in top
+        ]
 
 model_service = ModelService()
 

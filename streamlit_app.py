@@ -148,9 +148,9 @@ if page == "🏠 Overview":
     st.markdown("### Model Performance & Dataset overview")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown('<div class="metric-card"><p class="metric-value">95.2%</p><p class="metric-label">ROC-AUC Score</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><p class="metric-value">95.1%</p><p class="metric-label">ROC-AUC Score</p></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown('<div class="metric-card"><p class="metric-value">92.4%</p><p class="metric-label">PR-AUC Score</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><p class="metric-value">47.1%</p><p class="metric-label">PR-AUC Score</p></div>', unsafe_allow_html=True)
     with col3:
         st.markdown('<div class="metric-card"><p class="metric-value">6,819</p><p class="metric-label">Dataset Size</p></div>', unsafe_allow_html=True)
     with col4:
@@ -354,6 +354,10 @@ elif page in ["🔍 Predict Bankruptcy", "🔍 Predict (Guest Mode)"]:
                         )
                     else:
                         st.warning("Altman Z-Score features were not fully supplied.")
+
+                if res.get("top_factors"):
+                    st.markdown("#### Top factors behind this prediction (SHAP)")
+                    st.dataframe(pd.DataFrame(res["top_factors"]), use_container_width=True, hide_index=True)
                         
                 if st.session_state["token"]:
                     st.toast("💾 Prediction saved automatically to your profile in Supabase.")
