@@ -2,7 +2,7 @@ streamlit>=1.30.0
 pandas>=2.0.0
 numpy>=1.24.0
 scikit-learn>=1.3.0
-xgboost>=2.0.0
+xgboost>=2.0.0,<3.1  # shortcut: shap<=0.49 (last for Python 3.10) cannot read xgboost>=3.1 models; lift when moving to Python 3.11+ / shap>=0.50
 shap>=0.43.0
 matplotlib>=3.7.0
 seaborn>=0.13.0
