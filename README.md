@@ -77,7 +77,9 @@ streamlit_app.py                # Streamlit UI client
 training/
 ├── __init__.py
 ├── train_utils.py              # Winsorization & scaling helper functions
-└── train_model.py              # XGBoost training pipeline script (outputs to app/models/)
+├── train_model.py              # XGBoost training pipeline script (outputs to app/models/)
+└── evaluate.py                 # Read-only metrics, thresholds and SHAP ranking for the deployed model
+tests/                          # pytest: auth helpers, cache key, /predict (Supabase/Redis faked)
 ```
 
 ---
