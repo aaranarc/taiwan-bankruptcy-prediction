@@ -21,15 +21,30 @@ This decoupled application separates frontend presentation from model inference 
 
 ## Model Performance
 
+Held-out test split: 1,364 firms, 44 bankrupt (base rate 3.2%). Recall is for the bankrupt class at a 0.50 threshold. Baseline rows come from `taiwan_bankruptcy_prediction.ipynb`; the deployed row comes from `python training/evaluate.py`.
+
 | Model | ROC-AUC | PR-AUC | Recall (Bankrupt) |
 |-------|---------|--------|-------------------|
-| Altman Z-Score (1968) | 0.09 | — | 0% |
-| Logistic Regression | 0.44 | 0.03 | 20% |
-| Random Forest baseline | 0.94 | 0.48 | 23% |
-| RF + SMOTE | 0.95 | 0.48 | 57% |
-| **XGBoost + SMOTE (final)** | **0.94** | **0.52** | **68%** |
+| Altman Z-Score (1968) | 0.92 (using −Z as the score) | — | 0% at its 1.81 / 2.99 cut-offs (6,813 of 6,819 firms "Safe") |
+| Logistic Regression | 0.45 | 0.03 | 20% |
+| Random Forest | 0.93 | 0.47 | 27% |
+| RF + SMOTE | 0.95 | 0.48 | 55% |
+| **XGBoost + `scale_pos_weight` (deployed)** | **0.95** | **0.47** | **80%** |
 
-> **Note**: Altman Z-Score fails on this dataset (ROC-AUC 0.09) because thresholds calibrated for 1960s US manufacturing firms do not directly transfer to Taiwanese firms. This highlights the necessity of a modern data-driven ML approach.
+> **Logistic Regression** scores below 0.5 ROC-AUC, which points to a convergence/scaling problem in that run (default solver settings), not a real baseline.
+>
+> **Altman Z-Score:** the ranking works (ROC-AUC 0.92 on the test set), but the calibration doesn't transfer. The 1.81 / 2.99 cut-offs were set for 1960s US manufacturers; on this Taiwanese data almost every firm scores above 2.99, so the classic zones flag no bankruptcies.
+
+### Decision thresholds (deployed model)
+
+| Threshold | Recall | Precision | Bankrupt firms caught (of 44) | False alarms (of 1,320) |
+|-----------|--------|-----------|-------------------------------|-------------------------|
+| 0.15 | 0.98 | 0.12 | 43 | 306 |
+| 0.35 | 0.89 | 0.18 | 39 | 172 |
+| 0.50 | 0.80 | 0.23 | 35 | 116 |
+| 0.60 | 0.77 | 0.27 | 34 | 91 |
+
+The API maps the predicted probability to risk tiers with the same cut-offs: **Low** < 0.15 ≤ **Medium** < 0.35 ≤ **High** < 0.60 ≤ **Critical**. Every response also returns `top_factors`, the five features with the largest per-prediction SHAP contribution.
 
 ---
 
