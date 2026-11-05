@@ -4,11 +4,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ui.components import cards, empty_state, hero, load_json, plot
-from ui.theme import ACCENT, BORDER, GRADE_COLORS, MUTED, RISK_AMBER, TEMPLATE, fmt_pd
+from ui.theme import ACCENT, BORDER, GRADE_COLORS, MUTED, RISK_AMBER, TEMPLATE
 
 hero("Credit risk desk", "Model card",
      "How the model was evaluated, how well its probabilities are calibrated, and where it should not be used. "
-     "Every number on this page is read from reports/metrics.json.")
+     "Every number on this page is read from reports/metrics.json and reports/deployed_model.json.")
 
 r = load_json("reports/metrics.json")
 deployed = load_json("reports/deployed_model.json")
@@ -32,7 +32,7 @@ cards([
     ("ROC-AUC", f"{nm['roc_auc']['mean']:.3f}", f"± {nm['roc_auc']['std']:.3f} · ranking quality"),
     ("PR-AUC", f"{nm['pr_auc']['mean']:.3f}", f"± {nm['pr_auc']['std']:.3f} · base rate {r['data']['base_rate']:.3f}"),
     ("Brier score", f"{nm['brier']['mean']:.4f}", f"± {nm['brier']['std']:.4f} · calibrated PD, lower is better"),
-    ("Deployed threshold", fmt_pd(deployed["threshold"]),
+    ("Deployed threshold", f"{deployed['threshold']:.1%}",
      f"missed default = {deployed['cost_ratio_fn_to_fp']}× false alarm"),
     ("Recall at threshold", f"{nm['recall_at_threshold']['mean']:.0%}",
      f"± {nm['recall_at_threshold']['std']:.0%} · defaults caught"),

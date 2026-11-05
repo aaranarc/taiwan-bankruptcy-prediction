@@ -20,7 +20,6 @@ from ui.components import (
     shap_waterfall,
 )
 from ui.inputs import current_firm, load_firm, render_inputs
-from ui.theme import fmt_pd
 
 init_state()
 meta = get_meta()
@@ -71,7 +70,7 @@ with right:
             plot(pd_gauge(result["probability"], meta["grades"], result["threshold"]))
         source = "served from cache" if result.get("cached") else "computed by the model"
         st.caption(f"API responded in {st.session_state.latency:.2f} s · {source} · decision threshold "
-                   f"{fmt_pd(result['threshold'])} (missed default = {meta['cost_ratio_fn_to_fp'] if meta else '?'}× "
+                   f"{result['threshold']:.1%} (missed default = {meta['cost_ratio_fn_to_fp'] if meta else '?'}× "
                    f"a false alarm) · model {escape(result['model_version'])}")
         if st.session_state.get("result_firm") != current_firm():
             st.warning("Inputs changed since this score. Press Score company to update.", icon=":material/sync:")
