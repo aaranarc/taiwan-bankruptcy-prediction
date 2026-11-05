@@ -159,3 +159,36 @@ It's bounded to ratios management can change, within ranges the model has seen, 
 
 **Q: What is SHAP showing in the waterfall?**
 Each feature's contribution to the XGBoost log-odds *before* calibration. Calibration is a single increasing curve applied afterwards, so the order and sign of contributions still apply to the PD.
+
+
+---
+
+## Phase 2: moving hosting to Vercel (Python only)
+
+Full details: [DEPLOYMENT.md](DEPLOYMENT.md).
+
+**Shape:** one Vercel project with two *services*. `web` is Streamlit, run as a Python ASGI app (`server.py` wraps `streamlit.App`). `api` is the existing FastAPI app, built from the root `Dockerfile` and run on Vercel's *Container Runtime*. Only `web` has a public route. `api` is reachable only through a **service binding**: Vercel injects its private URL into `web` as `API_INTERNAL_URL`.
+
+**Why the API is a container, not a Python function:** the UI's dependencies alone measured about 424 MB against the 500 MB Python function limit. XGBoost, SHAP, scikit-learn and SciPy wouldn't fit beside them. A container image can be up to 15 GB; ours is 1.13GB locally.
+
+**Why the URL and secrets can't reach the browser:** all Streamlit Python runs on the server. The browser only receives rendered widgets over a WebSocket. The one place that could leak the URL is an error message (a `requests` exception contains the host), so `ui/api.py` replaces it with a generic message, and a test checks this.
+
+**Redis is optional by design:** with no `REDIS_URL`, or a Redis that's down, `get` returns a miss and `set` returns False. The prediction still works, just uncached. Tests cover "not configured", "down at start-up" and "fails mid-request".
+
+**Cold start:** measured locally, not assumed: 1.58 s from `docker run` to the first answer on Darwin arm64. Vercel adds VM start and image fetch on top. Containers scale to zero after 5 idle minutes in production, so the first user after a quiet spell waits. DEPLOYMENT.md has the steps to measure it on Vercel.
+
+**Session state is temporary:** a refresh or a new function instance means a new Streamlit session, so you sign in again. Anything that must survive (users, history) is in Supabase.
+
+### Interview questions
+
+**Q: Why not put everything in one container?**
+You could, but Vercel serves Streamlit natively as a Python function (cheap, scales with traffic), while the heavy model needs a container. Separate services also mean a UI change doesn't rebuild the model image.
+
+**Q: What does a service binding give you that an env var with a URL doesn't?**
+It's private (no public route), deployment-aware (a preview UI talks to the same preview's API), and Vercel generates it, so there's no hard-coded hostname. It doesn't authenticate, which is why the API still checks JWTs.
+
+**Q: How do you know the app works without Redis?**
+The cache wrapper swallows connection errors and returns a miss, and there are tests for "not configured", "down at start-up" and "fails mid-request".
+
+**Q: What would you check before removing Render?**
+That a preview *and* production deployment both return a real prediction that's logged to Supabase. Then suspend Render first, so the step can be reversed, before deleting it.

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": ".",
+      "runtime": "python",
+      "entrypoint": "api.index:app",
+      "functions": {
+        "api/index.py": {
+          "maxDuration": 300,
+          "includeFiles": "{server.py,streamlit_app.py,ui/**,.streamlit/**,reports/**}",
+          "excludeFiles": "{app/**,config/**,training/**,tests/**,data/**,docs/**,assets/**,*.ipynb,.venv/**}"
+        }
+      },
+      "bindings": [
+        {
+          "type": "service",
+          "service": "api",
+          "format": "url",
+          "env": "API_INTERNAL_URL"
+        }
+      ]
+    },
+    "api": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
+}

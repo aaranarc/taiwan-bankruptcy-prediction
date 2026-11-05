@@ -14,7 +14,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+from ui.api import base_url  # noqa: E402  (Vercel binding URL, else BACKEND_URL)
+
+BACKEND_URL = base_url().rstrip("/")
 
 # Custom CSS for rich premium aesthetics
 st.markdown("""
