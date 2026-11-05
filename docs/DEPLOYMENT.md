@@ -32,7 +32,7 @@ Render (`render.yaml`) stays as the rollback until a Vercel **preview and** prod
 | Item | Limit (Vercel docs) | Measured here | Source of the measurement |
 |------|---------------------|---------------|---------------------------|
 | `web` Python bundle (uncompressed) | 500 MB; "large functions" beta up to 5 GB | ≈ 424 MB of dependencies (streamlit, pandas, plotly, requests + transitive; pyarrow alone ≈ 169 MB), Linux wheels, Python 3.12, excluding `__pycache__` | `pip install --target … --platform manylinux…` + `du`, run during this migration |
-| `api` container image | 15 GB total, 2 GB per compressed layer, 2,000,000 files | 1.13 GB (local arm64 build) | `docs/verification/cold_start_local.json` (CI also records the amd64 size in its job summary) |
+| `api` container image | 15 GB total, 2 GB per compressed layer, 2,000,000 files | 1.13 GB (local arm64 build) | `docs/verification/cold_start_local.json` and `docs/verification/ci.md` (amd64 size from the CI run) |
 | Request / response body | 4.5 MB | Streamlit upload limit set to 4 MB (`server.py`, `.streamlit/config.toml`); `/predict/batch` capped at 500 rows | |
 | Function duration | Hobby 300 s | `maxDuration: 300` for `web` | |
 
