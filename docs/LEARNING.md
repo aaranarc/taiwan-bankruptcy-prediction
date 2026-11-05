@@ -224,3 +224,25 @@ The whole project is Python, and I can defend every line. Streamlit's theme conf
 
 **Q: Is the API URL visible to users?**
 No. Streamlit code runs on the server, and only rendered elements reach the browser. The one leak path is an error message, and those are sanitised and tested.
+
+---
+
+## Phase 4: planning an Indian default backtest (plan only)
+
+See [INDIA_BACKTEST_PLAN.md](INDIA_BACKTEST_PLAN.md). The key ideas:
+
+- **Labels come from public events** (IBC admission, a D rating, a missed payment, an RBI supersession), dated by when they happened. Financial statements are dated by when they were **filed**, so the backtest never uses information an analyst didn't have (no look-ahead).
+- **The biggest obstacle is the inputs, not the model:** the Taiwan ratios were normalised by the data provider in an undocumented way. The plan maps Indian ratios by *rank* (percentile) and retrains a reduced model on only the ratios India can supply, measuring what that costs on Taiwan first.
+- **Lead time** is the headline result (how many years before default the model first flagged the firm), always reported next to the false-alarm rate on matched healthy peers.
+- **Lenders (DHFL, Reliance Capital, IL&FS) are handled separately:** high leverage is normal for them, so a model trained on industrial firms would flag all of them.
+
+### Interview questions
+
+**Q: Can you apply a model trained in one country to another?**
+Only after checking that the inputs mean the same thing. Here they don't (undocumented normalisation), so the plan uses rank mapping and reports the result as a test of transfer, not as a validated Indian PD.
+
+**Q: What's look-ahead bias in default prediction?**
+Using statements as of the fiscal year end when they were only published months later, sometimes after the default. The plan dates everything by filing date.
+
+**Q: Why match healthy firms by sector and size?**
+So the model isn't rewarded for simply spotting "small steel company", but matching also inflates AUC compared with the real population. The plan says so next to every number.
