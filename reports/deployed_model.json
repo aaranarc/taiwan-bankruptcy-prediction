@@ -1,0 +1,55 @@
+{
+  "trained_at": "2026-11-05T09:43:25+00:00",
+  "git": {
+    "commit": "3602ed93d276b8fb465ce10baba3923feaeca9b1",
+    "dirty": false
+  },
+  "procedure": "training/procedure.py (evaluated by training/nested_cv.py)",
+  "xgb_params": {
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "n_estimators": 600,
+    "subsample": 0.7,
+    "colsample_bytree": 0.9
+  },
+  "calibration_method": "isotonic",
+  "isotonic_brier_gain": {
+    "mean": 0.0013396343800172502,
+    "std": 0.0007060876756544469
+  },
+  "threshold": 0.105,
+  "cost_ratio_fn_to_fp": 10,
+  "grades": [
+    {
+      "grade": "A",
+      "max_pd": 0.01
+    },
+    {
+      "grade": "B",
+      "max_pd": 0.03
+    },
+    {
+      "grade": "C",
+      "max_pd": 0.1
+    },
+    {
+      "grade": "D",
+      "max_pd": 0.3
+    },
+    {
+      "grade": "E",
+      "max_pd": 1.0
+    }
+  ],
+  "n_rows": 6819,
+  "search_scores_pr_auc": {
+    "{\"learning_rate\": 0.01, \"max_depth\": 3, \"n_estimators\": 300}": 0.43691546562848016,
+    "{\"learning_rate\": 0.01, \"max_depth\": 3, \"n_estimators\": 600}": 0.4537698634303508,
+    "{\"learning_rate\": 0.05, \"max_depth\": 3, \"n_estimators\": 300}": 0.45871923062648473,
+    "{\"learning_rate\": 0.05, \"max_depth\": 3, \"n_estimators\": 600}": 0.4558177076184388,
+    "{\"learning_rate\": 0.01, \"max_depth\": 5, \"n_estimators\": 300}": 0.44844148242845944,
+    "{\"learning_rate\": 0.01, \"max_depth\": 5, \"n_estimators\": 600}": 0.46437096191864285,
+    "{\"learning_rate\": 0.05, \"max_depth\": 5, \"n_estimators\": 300}": 0.4757226144040332,
+    "{\"learning_rate\": 0.05, \"max_depth\": 5, \"n_estimators\": 600}": 0.48742387326924214
+  }
+}

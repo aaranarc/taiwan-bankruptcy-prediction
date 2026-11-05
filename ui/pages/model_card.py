@@ -119,7 +119,7 @@ st.markdown("""
 - **Not a credit decision tool.** A portfolio demo for learning. PDs are relative to this dataset's base rate, not a regulatory PD.
 - **Pre-normalised inputs.** The ratios were already scaled to 0–1 by the data provider, so inputs are not raw accounting numbers, and the stress shocks are approximations.
 - **Nested CV is the honest estimate.** The headline numbers re-run hyperparameter search, calibration choice and threshold choice inside every outer training fold. The non-nested comparison table reuses the notebook's hyperparameters and is slightly optimistic.
-- **Counterfactuals hold other ratios fixed.** Real changes move several ratios at once.
+- **Counterfactuals hold other ratios fixed.** Real changes move several ratios at once. For severe-risk (grade E) firms, three adjustable ratios within the training range are usually not enough to reach grade D, and the tool says so instead of inventing a path.
 """)
 for c in r["caveats"]:
     st.caption(c)
