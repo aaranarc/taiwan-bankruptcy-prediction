@@ -1,0 +1,62 @@
+/* Only what .streamlit/config.toml can't do. Selectors: Streamlit's data-testid attributes (stable API for
+   testing) and our own cr-* classes. Colours mirror ui/theme.py. */
+
+/* ---- Hide default chrome (menu, toolbar actions, top decoration bar, running indicator, footer) ---- */
+[data-testid="stMainMenu"],
+[data-testid="stToolbarActions"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+footer { display: none !important; }
+/* Keep the header element itself: on narrow screens it holds the button that opens the sidebar. */
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stMainBlockContainer"] { padding-top: 2.2rem; max-width: 1280px; }
+
+/* ---- Page header ---- */
+.cr-hero { margin: 0 0 1.1rem 0; }
+.cr-hero__eyebrow { color: #8DB0F5; font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.cr-hero__title { color: #E5EAF3; font-size: 1.6rem; font-weight: 700; margin: .15rem 0 .2rem; line-height: 1.2; }
+.cr-hero__sub { color: #8A98B3; font-size: .92rem; margin: 0; max-width: 62ch; }
+
+/* ---- Metric cards ---- */
+.cr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; margin: .25rem 0 1rem; }
+.cr-card { background: #131C2E; border: 1px solid #22304A; border-radius: .75rem; padding: .9rem 1rem; min-width: 0; }
+.cr-card__label { color: #8A98B3; font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.cr-card__value { color: #E5EAF3; font-size: 1.45rem; font-weight: 700; margin-top: .25rem; font-variant-numeric: tabular-nums; }
+.cr-card__sub { color: #8A98B3; font-size: .8rem; margin-top: .15rem; }
+
+/* ---- Grade badge ---- */
+.cr-badge { display: inline-flex; align-items: center; gap: .55rem; padding: .35rem .8rem .35rem .4rem;
+            border-radius: 999px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.cr-badge__letter { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 999px;
+                    background: var(--c); color: #0B1220; font-weight: 800; font-size: 1rem; }
+.cr-badge__text { color: #E5EAF3; font-weight: 600; font-size: .9rem; }
+.cr-flag { display: inline-block; margin-left: .5rem; padding: .2rem .6rem; border-radius: 999px; font-size: .75rem;
+           font-weight: 600; letter-spacing: .03em; }
+.cr-flag--on { background: rgba(239, 68, 68, .15); color: #FCA5A5; border: 1px solid rgba(239, 68, 68, .5); }
+.cr-flag--off { background: rgba(34, 197, 94, .12); color: #86EFAC; border: 1px solid rgba(34, 197, 94, .45); }
+
+/* ---- Path-to-safety / info panels ---- */
+.cr-panel { background: #131C2E; border: 1px solid #22304A; border-left: 3px solid #5B8DEF; border-radius: .75rem;
+            padding: .9rem 1rem; margin: .5rem 0 1rem; }
+.cr-panel__title { color: #E5EAF3; font-weight: 700; margin-bottom: .35rem; }
+.cr-panel__body { color: #A9B6CF; font-size: .88rem; }
+.cr-change { display: grid; grid-template-columns: 1fr auto; gap: .2rem .75rem; padding: .45rem 0; border-top: 1px solid #22304A; }
+.cr-change:first-of-type { border-top: 0; }
+.cr-change__name { color: #E5EAF3; font-size: .88rem; }
+.cr-change__move { color: #8DB0F5; font-variant-numeric: tabular-nums; font-size: .88rem; text-align: right; }
+.cr-change__pct { color: #8A98B3; font-size: .76rem; grid-column: 1 / -1; }
+
+/* ---- Empty state ---- */
+.cr-empty { border: 1px dashed #22304A; border-radius: .75rem; padding: 2rem 1rem; text-align: center; color: #8A98B3; }
+.cr-empty__title { color: #E5EAF3; font-weight: 600; margin-bottom: .25rem; }
+
+.cr-muted { color: #8A98B3; font-size: .82rem; }
+
+/* ---- Phone width ---- */
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"] { padding-left: .9rem; padding-right: .9rem; padding-top: 3rem; }
+  .cr-hero__title { font-size: 1.3rem; }
+  .cr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  .cr-card { padding: .7rem .75rem; }
+  .cr-card__value { font-size: 1.15rem; }
+}

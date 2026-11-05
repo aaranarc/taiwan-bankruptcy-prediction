@@ -17,3 +17,12 @@ venv/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Test / coverage output
+.coverage
+coverage.xml
+.pytest_cache/
+.ruff_cache/
+
+# Vercel CLI link (project/org ids)
+.vercel/

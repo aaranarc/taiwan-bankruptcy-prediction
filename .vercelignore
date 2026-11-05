@@ -1,0 +1,13 @@
+# Not needed by either Vercel service (web = Streamlit UI, api = Docker image built from app/ + config/).
+.venv/
+.git/
+**/__pycache__/
+.env
+data/
+docs/
+tests/
+training/
+assets/
+*.ipynb
+.coverage
+coverage.xml

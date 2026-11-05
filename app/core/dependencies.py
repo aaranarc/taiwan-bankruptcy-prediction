@@ -1,9 +1,10 @@
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from supabase import create_client, Client
+from supabase import Client, create_client
+
 from app.core.config import settings
-from app.core.security import decode_access_token
 from app.core.exceptions import CredentialsException
+from app.core.security import decode_access_token
 from app.utils.logger import get_logger
 
 logger = get_logger("dependencies")
@@ -35,11 +36,11 @@ def get_current_user(
 ) -> dict:
     if not token:
         raise CredentialsException("Not authenticated")
-    
+
     email = decode_access_token(token)
     if not email:
         raise CredentialsException("Invalid token or token expired")
-        
+
     try:
         res = db.table("users").select("*").eq("email", email).execute()
         if not res.data or len(res.data) == 0:

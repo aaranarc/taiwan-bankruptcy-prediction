@@ -1,11 +1,16 @@
+# Rollback host. Keep until a Vercel preview AND production deployment both return a real prediction
+# (removal steps: docs/DEPLOYMENT.md). Dependencies are split since the Vercel migration:
+# requirements-api.txt = API, requirements.txt = Streamlit UI only.
 services:
   # 1. FastAPI Backend Service
   - type: web
     name: bankruptcy-predictor-api
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements-api.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.15
       - key: REDIS_URL
         sync: false
       - key: SUPABASE_URL
@@ -22,5 +27,7 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.15
       - key: BACKEND_URL
         sync: false

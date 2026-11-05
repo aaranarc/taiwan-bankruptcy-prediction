@@ -1,21 +1,32 @@
-import os
 import hashlib
+import json
+import os
+from typing import Any, Dict, List
+
 import joblib
-import shap
-import pandas as pd
 import numpy as np
-from typing import Dict, List, Any, Optional
+import pandas as pd
+import shap
+
+from app.services import scenarios
+from app.services.risk import grade_for, load_config, monotone_directions
 from app.utils.logger import get_logger
 
 logger = get_logger("model_service")
 
 MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
 
+
 class ModelService:
+    """Loads the trained artifacts once and turns raw ratios into PDs, grades and explanations."""
+
     def __init__(self):
         self.artifacts = {}
+        self.meta = {}
         self.explainer = None
         self.model_version = "unknown"
+        self.policy = load_config('risk_policy.json')
+        self.directions = monotone_directions()
         self.load_artifacts()
 
     def load_artifacts(self):
@@ -24,11 +35,6 @@ class ModelService:
             'scaler': 'robust_scaler.pkl',
             'bounds': 'winsorize_bounds.pkl',
             'feature_names': 'feature_names.pkl',
-            'best_params': 'best_params.pkl',
-            'test_metrics': 'test_metrics.pkl',
-            'shap_values': 'shap_values_test.pkl',
-            'x_test': 'x_test.pkl',
-            'y_test': 'y_test.pkl',
         }
         for key, fname in file_map.items():
             path = os.path.join(MODELS_DIR, fname)
@@ -39,17 +45,39 @@ class ModelService:
                 self.artifacts[key] = None
                 logger.warning(f"Model artifact not found at {path}")
 
-        model_path = os.path.join(MODELS_DIR, file_map['model'])
+        q_path = os.path.join(MODELS_DIR, 'feature_quantiles.json')
+        if os.path.exists(q_path):
+            with open(q_path) as fh:
+                self.artifacts['quantiles'] = pd.DataFrame(json.load(fh))  # index = percentile 0..100
+
+        meta_path = os.path.join(MODELS_DIR, 'model_meta.json')
+        if os.path.exists(meta_path):
+            with open(meta_path) as fh:
+                self.meta = json.load(fh)
+
         if self.artifacts['model'] is not None:
-            with open(model_path, 'rb') as fh:
+            with open(os.path.join(MODELS_DIR, file_map['model']), 'rb') as fh:
                 self.model_version = hashlib.sha256(fh.read()).hexdigest()[:8]
             try:
-                self.explainer = shap.TreeExplainer(self.artifacts['model'])
+                # SHAP explains the underlying XGBoost (log-odds), not the calibration step on top of it.
+                self.explainer = shap.TreeExplainer(self.base_estimator)
             except Exception as e:
                 logger.warning(f"SHAP explainer unavailable; predictions will omit top_factors: {e}")
 
+    @property
+    def base_estimator(self):
+        return self.artifacts['model'].calibrated_classifiers_[0].estimator
+
+    @property
+    def threshold(self) -> float:
+        return self.meta['threshold']
+
+    @property
+    def grades(self) -> list:
+        return self.meta.get('grades') or self.policy['grades']
+
     def get_feature_names(self) -> List[str]:
-        return self.artifacts.get("feature_names", [])
+        return self.artifacts.get("feature_names") or []
 
     def preprocess_input(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -78,89 +106,52 @@ class ModelService:
             return pd.DataFrame(scaled, columns=feature_names, index=df.index)
         return df
 
-    def predict(self, features: Dict[str, float]) -> Dict[str, Any]:
-        if not self.artifacts.get("model"):
+    def score(self, df_raw: pd.DataFrame) -> np.ndarray:
+        """Calibrated probability of default for each row of raw ratios."""
+        if self.artifacts.get("model") is None:
             raise RuntimeError("Model is not loaded.")
+        return self.artifacts["model"].predict_proba(self.preprocess_input(df_raw))[:, 1]
 
+    def predict(self, features: Dict[str, float]) -> Dict[str, Any]:
         df_raw = pd.DataFrame([features])
-        df_proc = self.preprocess_input(df_raw)
-
-        model = self.artifacts["model"]
-        probabilities = model.predict_proba(df_proc)[:, 1]
-        predictions = model.predict(df_proc)
-
-        prob = float(probabilities[0])
-        pred = int(predictions[0])
-        top_factors = self.top_factors(df_proc, features) if self.explainer else None
-
-        if prob < 0.15:
-            risk_tier = 'Low Risk'
-            risk_emoji = '🟢'
-            risk_color = '#10b981'
-        elif prob < 0.35:
-            risk_tier = 'Medium Risk'
-            risk_emoji = '🟡'
-            risk_color = '#f59e0b'
-        elif prob < 0.60:
-            risk_tier = 'High Risk'
-            risk_emoji = '🟠'
-            risk_color = '#f97316'
-        else:
-            risk_tier = 'Critical Risk'
-            risk_emoji = '🔴'
-            risk_color = '#ef4444'
-
-        # Compute Altman Z-Score if features are present
-        altman_z = None
-        altman_zone = None
-        altman_emoji = None
-        altman_color = None
-
-        altman_features = {
-            'X1': 'Working Capital to Total Assets',
-            'X2': 'Retained Earnings to Total Assets',
-            'X3': 'ROA(B) before interest and depreciation after tax',
-            'X4': 'Net worth/Assets',
-            'X5': 'Total Asset Turnover',
-        }
-        altman_coeffs = {'X1': 1.2, 'X2': 1.4, 'X3': 3.3, 'X4': 0.6, 'X5': 1.0}
-
-        try:
-            if all(col in features for col in altman_features.values()):
-                z = sum(altman_coeffs[k] * features[altman_features[k]] for k in altman_features)
-                altman_z = float(z)
-                if altman_z > 2.99:
-                    altman_zone = 'Safe'
-                    altman_emoji = '🟢'
-                    altman_color = '#10b981'
-                elif altman_z > 1.81:
-                    altman_zone = 'Grey'
-                    altman_emoji = '🟡'
-                    altman_color = '#f59e0b'
-                else:
-                    altman_zone = 'Distress'
-                    altman_emoji = '🔴'
-                    altman_color = '#ef4444'
-        except Exception as e:
-            logger.warning(f"Error computing Altman Z-Score: {e}")
-
-        return {
+        prob = float(self.score(df_raw)[0])
+        flagged = prob >= self.threshold
+        result = {
             "probability": prob,
-            "prediction": pred,
-            "risk_tier": risk_tier,
-            "risk_emoji": risk_emoji,
-            "risk_color": risk_color,
-            "altman_z_score": altman_z,
-            "altman_zone": altman_zone,
-            "altman_emoji": altman_emoji,
-            "altman_color": altman_color,
-            "top_factors": top_factors,
+            "grade": grade_for(prob, self.grades),
+            "threshold": self.threshold,
+            "flagged": flagged,
+            "prediction": int(flagged),
+            "model_version": self.model_version,
+            "top_factors": None,
+            "shap_base_value": None,
+            "shap_other": None,
         }
+        if self.explainer:
+            result.update(self.explain(self.preprocess_input(df_raw), features))
+        return result
 
-    def top_factors(self, df_proc: pd.DataFrame, features: Dict[str, float], k: int = 5) -> List[Dict[str, Any]]:
+    def predict_batch(self, rows: List[Dict[str, float]], k: int = 3) -> List[Dict[str, Any]]:
+        """Score many firms at once; each row gets its PD, grade, flag and top-k SHAP factors."""
+        df_raw = pd.DataFrame(rows)
+        df_proc = self.preprocess_input(df_raw)
+        probs = self.artifacts["model"].predict_proba(df_proc)[:, 1]
+        shap_rows = np.asarray(self.explainer.shap_values(df_proc)) if self.explainer else None
+        out = []
+        for i, prob in enumerate(probs):
+            factors = None
+            if shap_rows is not None:
+                top = np.argsort(-np.abs(shap_rows[i]))[:k]
+                factors = [{"feature": df_proc.columns[j], "shap": float(shap_rows[i][j])} for j in top]
+            out.append({"probability": float(prob), "grade": grade_for(float(prob), self.grades),
+                        "flagged": bool(prob >= self.threshold), "top_factors": factors})
+        return out
+
+    def explain(self, df_proc: pd.DataFrame, features: Dict[str, float], k: int = 10) -> Dict[str, Any]:
+        """Top-k SHAP contributions (log-odds) plus the rest summed, so a waterfall adds up exactly."""
         shap_row = np.asarray(self.explainer.shap_values(df_proc))[0]
         top = np.argsort(-np.abs(shap_row))[:k]
-        return [
+        factors = [
             {
                 "feature": df_proc.columns[i],
                 "value": float(features[df_proc.columns[i]]),
@@ -169,6 +160,33 @@ class ModelService:
             }
             for i in top
         ]
+        return {
+            "top_factors": factors,
+            "shap_base_value": float(np.ravel(self.explainer.expected_value)[0]),
+            "shap_other": float(shap_row.sum() - shap_row[top].sum()),
+        }
+
+    def counterfactual(self, features: Dict[str, float], target_grade: str) -> Dict[str, Any]:
+        return scenarios.counterfactual(features, self.score, self.artifacts['quantiles'], self.policy,
+                                        self.directions, self.grades, target_grade)
+
+    def stress(self, features: Dict[str, float], shocks: Dict[str, float]) -> Dict[str, Any]:
+        return scenarios.stress(features, self.score, self.artifacts['quantiles'], self.policy, self.grades,
+                                shocks)
+
+    def public_meta(self) -> Dict[str, Any]:
+        """Policy the UI needs to render inputs and labels. Contains no secrets."""
+        return {
+            "model_version": self.model_version,
+            "threshold": self.threshold,
+            "cost_ratio_fn_to_fp": self.meta.get('cost_ratio_fn_to_fp'),
+            "calibration_method": self.meta.get('calibration_method'),
+            "grades": self.grades,
+            "adjustable_features": self.policy['counterfactual']['adjustable_features'],
+            "default_target_grade": self.policy['counterfactual']['default_target_grade'],
+            "stress_shocks": {k: {f: v[f] for f in ('label', 'min', 'max', 'default', 'columns', 'doc')}
+                              for k, v in self.policy['stress_shocks'].items()},
+        }
+
 
 model_service = ModelService()
-

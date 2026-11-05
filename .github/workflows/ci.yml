@@ -2,18 +2,72 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
+      - run: pip install ruff==0.17.3
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
           cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements-api.txt
+            requirements.txt
       - name: Install
-        run: pip install -r requirements.txt pytest httpx
-      - name: Test
-        run: pytest -q
+        run: pip install -r requirements-dev.txt
+      - name: Test with coverage
+        run: |
+          set -o pipefail
+          pytest -q -p no:warnings --cov=app --cov=ui --cov-report=term --cov-report=xml | tee pytest.txt
+          {
+            echo "### Tests"
+            echo '```'
+            grep -E "passed|failed" pytest.txt | tail -1
+            grep -E "^TOTAL" pytest.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            pytest.txt
+            coverage.xml
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t bankruptcy-api .
+      - name: Run the image and wait for the model to load
+        # Building is not enough: a missing runtime dependency only shows up when artifacts are unpickled.
+        run: |
+          docker run -d --name api -p 8000:8000 -e JWT_SECRET_KEY=ci-only-not-a-secret bankruptcy-api
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000/meta > meta.json; then break; fi
+            sleep 1
+          done
+          docker logs api
+          python3 -c "import json; m = json.load(open('meta.json')); assert m['threshold'] > 0, m; print('threshold', m['threshold'], 'model', m['model_version'])"
+          docker images bankruptcy-api --format 'Image size: {{.Size}}'  # in the log too (summaries aren't in the API)
+          echo "### Docker" >> "$GITHUB_STEP_SUMMARY"
+          docker images bankruptcy-api --format 'Image size: {{.Size}}' >> "$GITHUB_STEP_SUMMARY"

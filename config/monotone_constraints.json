@@ -1,0 +1,32 @@
+{
+  "_doc": "Reviewed monotone constraints for XGBoost. +1 = a higher value may only raise (never lower) predicted risk; -1 = a higher value may only lower it. Only features with an unambiguous economic direction are listed. Columns are the dataset's own 0-1 normalised ratios; winsorising and RobustScaler are order-preserving, so these directions survive preprocessing.",
+  "constraints": {
+    "Debt ratio %": {"direction": 1, "reason": "More debt per unit of assets = more leverage."},
+    "Total debt/Total net worth": {"direction": 1, "reason": "Debt-to-equity: more leverage."},
+    "Liability to Equity": {"direction": 1, "reason": "Liabilities-to-equity: more leverage."},
+    "Current Liability to Assets": {"direction": 1, "reason": "More short-term obligations per unit of assets."},
+    "Current Liability to Current Assets": {"direction": 1, "reason": "Inverse of the current ratio: less liquidity."},
+    "Borrowing dependency": {"direction": 1, "reason": "Greater reliance on borrowed funds."},
+    "Net worth/Assets": {"direction": -1, "reason": "Equity cushion (= 1 - Debt ratio % in this data)."},
+    "Equity to Liability": {"direction": -1, "reason": "More equity per unit of liabilities."},
+    "ROA(A) before interest and % after tax": {"direction": -1, "reason": "More profitable assets."},
+    "ROA(B) before interest and depreciation after tax": {"direction": -1, "reason": "More profitable assets."},
+    "ROA(C) before interest and depreciation before interest": {"direction": -1, "reason": "More profitable assets."},
+    "Net Income to Total Assets": {"direction": -1, "reason": "Profitability."},
+    "Retained Earnings to Total Assets": {"direction": -1, "reason": "Accumulated profits (Altman X2)."},
+    "Persistent EPS in the Last Four Seasons": {"direction": -1, "reason": "Sustained earnings."},
+    "Current Ratio": {"direction": -1, "reason": "Liquidity."},
+    "Quick Ratio": {"direction": -1, "reason": "Liquidity excluding inventory."},
+    "Cash/Total Assets": {"direction": -1, "reason": "Cash buffer."},
+    "Cash/Current Liability": {"direction": -1, "reason": "Cash cover of short-term obligations."},
+    "Working Capital to Total Assets": {"direction": -1, "reason": "Liquidity (Altman X1)."}
+  },
+  "excluded_on_purpose": {
+    "Interest Coverage Ratio (Interest expense to EBIT)": "Name is contradictory: 'coverage' (EBIT/interest, higher = safer) vs 'interest expense to EBIT' (higher = riskier). The direction cannot be verified from the dataset documentation.",
+    "Interest Expense Ratio": "Rank correlation with bankruptcy is negative (-0.13), the opposite of what the name suggests, so the normalisation is unclear.",
+    "Degree of Financial Leverage (DFL)": "Sign depends on whether EBIT is positive; ambiguous after normalisation.",
+    "growth rates (all)": "Fast growth can be healthy or a sign of over-expansion.",
+    "turnover ratios (all)": "Industry-dependent; no universal direction.",
+    "Operating Gross Margin and other margin columns": "Plausibly -1, but left free to limit the metric cost; profitability is already constrained through ROA and net income."
+  }
+}

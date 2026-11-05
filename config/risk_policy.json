@@ -1,0 +1,56 @@
+{
+  "_doc": "Business policy, not fitted parameters. Changing it changes the model's decisions, so it is reviewed like code.",
+  "xgb_params": {
+    "colsample_bytree": 0.9, "learning_rate": 0.01, "max_depth": 3, "n_estimators": 300, "subsample": 0.7
+  },
+  "xgb_params_source": "Hyperparameters of the previously deployed model (app/models/best_params.pkl), tuned in the notebook on an 80/20 split; kept fixed so the constrained/unconstrained comparison isolates the effect of the constraints.",
+  "cost_ratio_fn_to_fp": 10,
+  "cost_ratio_doc": "A missed default (false negative) costs this many times a false alarm (false positive).",
+  "grades": [
+    {"grade": "A", "max_pd": 0.01},
+    {"grade": "B", "max_pd": 0.03},
+    {"grade": "C", "max_pd": 0.10},
+    {"grade": "D", "max_pd": 0.30},
+    {"grade": "E", "max_pd": 1.0}
+  ],
+  "grades_doc": "A PD belongs to the first grade whose max_pd it is strictly below (E catches the rest). Boundaries set before looking at results: base rate is about 3%.",
+  "linked_features": {
+    "Net worth/Assets": {"equals_one_minus": "Debt ratio %", "doc": "Debt ratio % + Net worth/Assets = 1 exactly for every firm in the data."}
+  },
+  "counterfactual": {
+    "adjustable_features": [
+      "Debt ratio %",
+      "Current Liability to Assets",
+      "Borrowing dependency",
+      "Current Ratio",
+      "Cash/Total Assets",
+      "Retained Earnings to Total Assets"
+    ],
+    "adjustable_doc": "Ratios management can move (pay down or refinance debt, raise cash, retain earnings). Every one is monotone-constrained, so the risk-reducing direction is known. Bounds: 1st-99th percentile of the training data.",
+    "max_features_changed": 3,
+    "steps_per_feature": 12,
+    "default_target_grade": "C"
+  },
+  "stress_shocks": {
+    "revenue_change_pct": {
+      "label": "Revenue change (%)", "kind": "relative", "min": -50, "max": 0, "default": -20,
+      "columns": ["Total Asset Turnover", "Revenue Per Share (Yuan ¥)"],
+      "doc": "Revenue / assets and revenue / share scale with revenue. Profit ratios are not touched here: see profitability_shift_pctile."
+    },
+    "interest_rate_change_pct": {
+      "label": "Interest cost change (%)", "kind": "relative", "min": 0, "max": 200, "default": 50,
+      "columns": ["Interest-bearing debt interest rate"],
+      "doc": "The firm's cost of interest-bearing debt rises by this percentage."
+    },
+    "debt_change_pct": {
+      "label": "Debt change (%)", "kind": "relative", "min": 0, "max": 100, "default": 25,
+      "columns": ["Debt ratio %", "Total debt/Total net worth", "Liability to Equity"],
+      "doc": "More borrowing with assets unchanged. Net worth/Assets is reset to 1 - Debt ratio %."
+    },
+    "profitability_shift_pctile": {
+      "label": "Profitability drop (percentile points)", "kind": "percentile_shift", "min": -50, "max": 0, "default": -20,
+      "columns": ["ROA(A) before interest and % after tax", "ROA(B) before interest and depreciation after tax", "ROA(C) before interest and depreciation before interest", "Net Income to Total Assets"],
+      "doc": "Profit ratios in this dataset are offset-normalised (about 0.5 = break-even), so a % change has no meaning; instead each is moved down this many percentile points of the training distribution, floored at the 1st percentile (P0 is a single extreme outlier)."
+    }
+  }
+}

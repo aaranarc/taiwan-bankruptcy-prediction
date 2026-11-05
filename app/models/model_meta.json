@@ -1,0 +1,34 @@
+{
+  "trained_at": "2026-11-05T07:50:43+00:00",
+  "git": {
+    "commit": "072b636acd44d8e4b26bf5cf7f7bd30358407d2e",
+    "dirty": true
+  },
+  "metrics_commit": "f211501926ba2712d59720ee53d9db4b9b2f6365",
+  "calibration_method": "sigmoid",
+  "threshold": 0.15,
+  "cost_ratio_fn_to_fp": 10,
+  "grades": [
+    {
+      "grade": "A",
+      "max_pd": 0.01
+    },
+    {
+      "grade": "B",
+      "max_pd": 0.03
+    },
+    {
+      "grade": "C",
+      "max_pd": 0.1
+    },
+    {
+      "grade": "D",
+      "max_pd": 0.3
+    },
+    {
+      "grade": "E",
+      "max_pd": 1.0
+    }
+  ],
+  "n_rows": 6819
+}
