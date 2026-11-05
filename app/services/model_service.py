@@ -35,7 +35,6 @@ class ModelService:
             'scaler': 'robust_scaler.pkl',
             'bounds': 'winsorize_bounds.pkl',
             'feature_names': 'feature_names.pkl',
-            'quantiles': 'feature_quantiles.pkl',
         }
         for key, fname in file_map.items():
             path = os.path.join(MODELS_DIR, fname)
@@ -45,6 +44,11 @@ class ModelService:
             else:
                 self.artifacts[key] = None
                 logger.warning(f"Model artifact not found at {path}")
+
+        q_path = os.path.join(MODELS_DIR, 'feature_quantiles.json')
+        if os.path.exists(q_path):
+            with open(q_path) as fh:
+                self.artifacts['quantiles'] = pd.DataFrame(json.load(fh))  # index = percentile 0..100
 
         meta_path = os.path.join(MODELS_DIR, 'model_meta.json')
         if os.path.exists(meta_path):

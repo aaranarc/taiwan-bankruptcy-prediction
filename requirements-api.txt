@@ -5,7 +5,9 @@ uvicorn[standard]==0.54.0
 pandas==3.1.1
 numpy==2.4.6
 scikit-learn==1.9.1
-xgboost==3.0.5
+# Same XGBoost build either way; on Linux the -cpu wheel skips the ~300 MB CUDA/NCCL dependency (CPU-only API).
+xgboost==3.0.5; sys_platform == "darwin"
+xgboost-cpu==3.0.5; sys_platform != "darwin"
 shap==0.51.0
 joblib==1.6.0
 redis==8.1.0

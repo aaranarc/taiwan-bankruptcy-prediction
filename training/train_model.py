@@ -23,7 +23,7 @@ from training.train_utils import ROOT, apply_winsorization, get_extreme_columns,
 MODELS_DIR = os.path.join(ROOT, 'app', 'models')
 UI_DIR = os.path.join(ROOT, 'ui')
 SEED = 42
-OBSOLETE = ['xgb_final_model.pkl', 'best_params.pkl', 'test_metrics.pkl', 'shap_values_test.pkl',
+OBSOLETE = ['feature_quantiles.pkl', 'xgb_final_model.pkl', 'best_params.pkl', 'test_metrics.pkl', 'shap_values_test.pkl',
             'x_test.pkl', 'y_test.pkl']
 
 
@@ -46,8 +46,9 @@ def main():
                                    ensemble=False).fit(x_s, y)
 
     # Percentiles 0..100 of the raw training data: bounds for counterfactuals and stress tests.
-    quantiles = x.quantile(np.linspace(0, 1, 101))
-    quantiles.index = np.arange(101)
+    # Saved as plain JSON, not a pickled DataFrame: pandas 3 pickles string labels as pyarrow objects,
+    # and the API image deliberately doesn't ship pyarrow.
+    quantiles = {c: x[c].quantile(np.linspace(0, 1, 101)).tolist() for c in x.columns}
 
     meta = {
         'trained_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
@@ -66,9 +67,11 @@ def main():
         if os.path.exists(path):
             os.remove(path)
     artifacts = {'model.joblib': model, 'robust_scaler.pkl': scaler, 'winsorize_bounds.pkl': bounds,
-                 'feature_names.pkl': list(x.columns), 'feature_quantiles.pkl': quantiles}
+                 'feature_names.pkl': [str(c) for c in x.columns]}
     for fname, obj in artifacts.items():
         joblib.dump(obj, os.path.join(MODELS_DIR, fname))
+    with open(os.path.join(MODELS_DIR, 'feature_quantiles.json'), 'w') as fh:
+        json.dump(quantiles, fh)
     with open(os.path.join(MODELS_DIR, 'model_meta.json'), 'w') as fh:
         json.dump(meta, fh, indent=2)
 

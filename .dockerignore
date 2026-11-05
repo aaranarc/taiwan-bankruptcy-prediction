@@ -1,5 +1,13 @@
+# Only app/, config/ and requirements-api.txt are copied into the API image; keep the build context small.
 .venv/
 .git/
-__pycache__/
+**/__pycache__/
 *.ipynb
 .env
+data/
+docs/
+reports/
+tests/
+training/
+ui/
+assets/

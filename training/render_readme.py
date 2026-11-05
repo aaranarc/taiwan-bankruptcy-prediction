@@ -13,38 +13,68 @@ METRICS = os.path.join(ROOT, 'reports', 'metrics.json')
 NAMES = {
     'logistic_regression': 'Logistic Regression (standardised, balanced weights)',
     'random_forest': 'Random Forest (balanced weights)',
-    'xgboost': '**XGBoost + `scale_pos_weight` (deployed config)**',
+    'xgboost_unconstrained': 'XGBoost + `scale_pos_weight`, unconstrained',
+    'xgboost_monotone': 'XGBoost + `scale_pos_weight`, monotone constraints',
 }
 
 
-def pm(m, pct=False):
+def pm(m, pct=False, digits=3):
     """Format a {'mean', 'std'} summary as 'mean ± std'."""
     if pct:
         return f"{m['mean'] * 100:.1f}% ± {m['std'] * 100:.1f}%"
-    return f"{m['mean']:.3f} ± {m['std']:.3f}"
+    return f"{m['mean']:.{digits}f} ± {m['std']:.{digits}f}"
 
 
 def render(r):
     cv, d, old, alt = r['cv'], r['data'], r['old_single_split'], r['altman_z_benchmark']
-    rows = [f"| {NAMES[k]} | {pm(m['roc_auc'])} | {pm(m['pr_auc'])} | {pm(m['recall'], pct=True)} |"
-            for k, m in r['models'].items()]
-    rows.insert(0, f"| Altman Z-Score (1968), scored as −Z | {pm(alt['roc_auc'])} | {pm(alt['pr_auc'])} | — |")
+    cal, dep, thr = r['calibration'], r['deployed_model'], r['threshold']
+    folds = cv['n_splits'] * cv['n_repeats']
+    rows = [f"| {NAMES[k]} | {pm(m['roc_auc'])} | {pm(m['pr_auc'])} | {pm(m['brier'], digits=4)} | "
+            f"{pm(m['recall'], pct=True)} |" for k, m in r['models'].items()]
+    rows.insert(0, f"| Altman Z-Score (1968), scored as −Z | {pm(alt['roc_auc'])} | {pm(alt['pr_auc'])} | — | — |")
+    rows.append(f"| **{dep['description']} (deployed)** | **{pm(dep['roc_auc'])}** | **{pm(dep['pr_auc'])}** | "
+                f"**{pm(dep['brier'], digits=4)}** | see threshold below |")
+    cost = r['constraint_cost']
+    a, h = thr['at_chosen'], thr['at_0_50_for_comparison']
+    grade_rows = [f"| {g['grade']} | < {g['max_pd']:.0%} | {g['n']:,} | {g['defaults']:,} | "
+                  f"{g['observed_default_rate']:.1%} | {g['mean_pd']:.1%} |" for g in r['grades']]
     commit = r['git']['commit'][:7] + (' (uncommitted changes)' if r['git']['dirty'] else '')
     return '\n'.join([
         f"{cv['n_repeats']}×{cv['n_splits']} repeated stratified cross-validation on all {d['rows']:,} firms "
-        f"({d['bankrupt']} bankrupt, base rate {d['base_rate']:.1%}). Values are mean ± std over "
-        f"{cv['n_splits'] * cv['n_repeats']} test folds. Recall is for bankrupt firms at a "
-        f"{r['threshold']:.2f} threshold. The old README used one 80/20 split whose test set had only "
-        f"{old['test_bankrupt']} bankrupt firms, so each missed firm moved recall by "
-        f"{1 / old['test_bankrupt']:.1%} and there was no error bar. Each CV test fold has about "
-        f"{cv['bankrupt_per_test_fold']['mean']:.0f} bankrupt firms too, but 25 folds give a mean and a spread.",
+        f"({d['bankrupt']} bankrupt, base rate {d['base_rate']:.1%}). Values are mean ± std over {folds} test "
+        f"folds; preprocessing, calibration and everything else are fitted inside each training fold. The old "
+        f"README used one 80/20 split with only {old['test_bankrupt']} bankrupt firms in its test set.",
         '',
-        '| Model | ROC-AUC | PR-AUC | Recall (Bankrupt) |',
-        '|-------|---------|--------|-------------------|',
+        '| Model | ROC-AUC | PR-AUC | Brier | Recall @ 0.50 (uncalibrated) |',
+        '|-------|---------|--------|-------|------------------------------|',
         *rows,
         '',
-        f"> **Altman Z-Score:** {alt['caveat']} Lower Z means more risk, so the score is negated before "
-        "computing AUC. The API no longer returns Altman zones.",
+        f"**Cost of the monotone constraints** ({r['monotone_constraints']['n_constrained']} features, "
+        "`config/monotone_constraints.json`), paired by fold: "
+        f"ROC-AUC {cost['roc_auc']['mean_difference']:+.4f} (± {cost['roc_auc']['std_difference']:.4f}), "
+        f"PR-AUC {cost['pr_auc']['mean_difference']:+.4f} (± {cost['pr_auc']['std_difference']:.4f}). "
+        "The raw Brier score is not comparable before calibration because `scale_pos_weight` inflates probabilities.",
+        '',
+        f"**Calibration:** {cal['chosen_method']} (rule: {cal['rule']}). Brier score of the calibrated PD "
+        f"{pm(dep['brier'], digits=4)} vs {pm(r['models']['xgboost_monotone']['brier'], digits=4)} uncalibrated. "
+        "Reliability plot: `reports/calibration.png`.",
+        '',
+        f"**Decision threshold:** {thr['chosen']:.3f}, the PD that minimises expected cost when a missed default "
+        f"costs {thr['cost_ratio_fn_to_fp']}× a false alarm (theory for perfectly calibrated PDs: "
+        f"{thr['bayes_optimal_if_perfectly_calibrated']:.3f}). At this threshold: precision {pm(a['precision'], pct=True)}, "
+        f"recall {pm(a['recall'], pct=True)}, {pm(a['flagged_share'], pct=True)} of firms flagged. At 0.50 the "
+        f"calibrated model catches {pm(h['recall'], pct=True)} of defaults.",
+        '',
+        '| Grade | PD band | Firm-predictions | Defaults | Observed default rate | Mean predicted PD |',
+        '|-------|---------|------------------|----------|-----------------------|-------------------|',
+        *grade_rows,
+        '',
+        f"Grades rank risk in order: **{'yes' if r['grades_rank_risk_in_order'] else 'NO'}**. Counts pool all "
+        f"{cv['n_repeats']} repeats, so each firm appears {cv['n_repeats']} times.",
+        '',
+        f"> **Altman Z-Score:** {alt['caveat']} Lower Z means more risk, so the score is negated before computing AUC.",
+        '>',
+        *[f"> **Caveat:** {c}" for c in r['caveats']],
         '',
         f"<sub>Generated by `python -m training.render_readme` from `reports/metrics.json` "
         f"(`{r['generated_by']}`, commit `{commit}`, {r['generated_at']}).</sub>",
