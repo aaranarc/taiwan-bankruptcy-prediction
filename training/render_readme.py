@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(ROOT, 'README.md')
 METRICS = os.path.join(ROOT, 'reports', 'metrics.json')
 NAMES = {
-    'logistic_regression': 'Logistic Regression (balanced weights)',
+    'logistic_regression': 'Logistic Regression (standardised, balanced weights)',
     'random_forest': 'Random Forest (balanced weights)',
     'xgboost': '**XGBoost + `scale_pos_weight` (deployed config)**',
 }
@@ -34,9 +34,10 @@ def render(r):
         f"{cv['n_repeats']}×{cv['n_splits']} repeated stratified cross-validation on all {d['rows']:,} firms "
         f"({d['bankrupt']} bankrupt, base rate {d['base_rate']:.1%}). Values are mean ± std over "
         f"{cv['n_splits'] * cv['n_repeats']} test folds. Recall is for bankrupt firms at a "
-        f"{r['threshold']:.2f} threshold. Each test fold holds about {cv['bankrupt_per_test_fold']['mean']:.0f} "
-        f"bankrupt firms; the old single 80/20 split had only {old['test_bankrupt']}, "
-        "so one or two firms swung its recall by several points.",
+        f"{r['threshold']:.2f} threshold. The old README used one 80/20 split whose test set had only "
+        f"{old['test_bankrupt']} bankrupt firms, so each missed firm moved recall by "
+        f"{1 / old['test_bankrupt']:.1%} and there was no error bar. Each CV test fold has about "
+        f"{cv['bankrupt_per_test_fold']['mean']:.0f} bankrupt firms too, but 25 folds give a mean and a spread.",
         '',
         '| Model | ROC-AUC | PR-AUC | Recall (Bankrupt) |',
         '|-------|---------|--------|-------------------|',
@@ -55,8 +56,8 @@ def main():
         report = json.load(fh)
     with open(README) as fh:
         text = fh.read()
-    new, n = re.subn(r'(<!-- metrics:start -->\n).*?(\n<!-- metrics:end -->)',
-                     lambda m: m.group(1) + render(report) + m.group(2), text, flags=re.S)
+    new, n = re.subn(r'(<!-- metrics:start -->\n).*?(<!-- metrics:end -->)',
+                     lambda m: m.group(1) + render(report) + '\n' + m.group(2), text, flags=re.S)
     if n != 1:
         raise SystemExit('README.md must contain exactly one <!-- metrics:start --> ... <!-- metrics:end --> block')
     with open(README, 'w') as fh:

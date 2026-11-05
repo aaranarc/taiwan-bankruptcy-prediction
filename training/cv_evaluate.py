@@ -19,7 +19,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split
-from sklearn.preprocessing import RobustScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import RobustScaler, StandardScaler
 from xgboost import XGBClassifier
 
 from training.train_utils import apply_winsorization, get_extreme_columns
@@ -50,7 +51,10 @@ def git_info():
 def models(xgb_params, scale_pos_weight):
     # All three handle class imbalance the same way (re-weighting), so the comparison is fair.
     return {
-        'logistic_regression': LogisticRegression(max_iter=5000, class_weight='balanced'),
+        # LR gets StandardScaler on winsorised data instead of the RobustScaler output: 22 columns have a
+        # near-zero IQR, so RobustScaler pushes them to ~1e13. Trees don't care; a linear model collapses.
+        'logistic_regression': make_pipeline(
+            StandardScaler(), LogisticRegression(max_iter=5000, class_weight='balanced')),
         'random_forest': RandomForestClassifier(
             n_estimators=300, class_weight='balanced', n_jobs=-1, random_state=SEED),
         'xgboost': XGBClassifier(
@@ -88,14 +92,15 @@ def main():
         altman['pr_auc'].append(average_precision_score(y_te, -z))
 
         # Preprocessing is fitted on the training fold only, so nothing leaks from the test fold.
-        x_tr, x_te, _ = apply_winsorization(x_tr, x_te, get_extreme_columns(x_tr))
-        scaler = RobustScaler().fit(x_tr)
-        x_tr = pd.DataFrame(scaler.transform(x_tr), columns=x.columns)
-        x_te = pd.DataFrame(scaler.transform(x_te), columns=x.columns)
+        w_tr, w_te, _ = apply_winsorization(x_tr, x_te, get_extreme_columns(x_tr))
+        scaler = RobustScaler().fit(w_tr)  # same preprocessing as the deployed model
+        r_tr = pd.DataFrame(scaler.transform(w_tr), columns=x.columns)
+        r_te = pd.DataFrame(scaler.transform(w_te), columns=x.columns)
 
         spw = (y_tr == 0).sum() / (y_tr == 1).sum()
         for name, model in models(xgb_params, spw).items():
-            prob = model.fit(x_tr, y_tr).predict_proba(x_te)[:, 1]
+            a, b = (w_tr, w_te) if name == 'logistic_regression' else (r_tr, r_te)
+            prob = model.fit(a, y_tr).predict_proba(b)[:, 1]
             pred = (prob >= THRESHOLD).astype(int)
             scores[name]['roc_auc'].append(roc_auc_score(y_te, prob))
             scores[name]['pr_auc'].append(average_precision_score(y_te, prob))
