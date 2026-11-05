@@ -1,4 +1,4 @@
-"""Model card: everything here is read from reports/metrics.json and config/monotone_constraints.json."""
+"""Model card: everything here is read from reports/metrics.json, reports/deployed_model.json and config/."""
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -11,9 +11,10 @@ hero("Credit risk desk", "Model card",
      "Every number on this page is read from reports/metrics.json.")
 
 r = load_json("reports/metrics.json")
+deployed = load_json("reports/deployed_model.json")
 constraints = load_json("config/monotone_constraints.json")
-if not r:
-    empty_state("No evaluation report", "Run python -m training.cv_evaluate to generate reports/metrics.json.")
+if not r or "nested" not in r or not deployed:
+    empty_state("No evaluation report", "Run training.cv_evaluate, training.nested_cv and training.train_model.")
     st.stop()
 
 
@@ -21,22 +22,32 @@ def pm(m: dict, digits: int = 3) -> str:
     return f"{m['mean']:.{digits}f} ± {m['std']:.{digits}f}"
 
 
-cv, dep, thr = r["cv"], r["deployed_model"], r["threshold"]
-st.caption(f"{cv['n_repeats']}×{cv['n_splits']} repeated stratified cross-validation · {r['data']['rows']:,} firms, "
+cv, dep, n = r["cv"], r["deployed_model"], r["nested"]
+nm = n["metrics"]
+st.caption(f"Nested {cv['n_repeats']}×{cv['n_splits']} cross-validation: hyperparameters, calibration method and "
+           f"threshold are all chosen inside each outer training fold · {r['data']['rows']:,} firms, "
            f"{r['data']['bankrupt']} bankrupt ({r['data']['base_rate']:.1%}) · mean ± std over "
-           f"{cv['n_splits'] * cv['n_repeats']} folds · report commit {r['git']['commit'][:7]}, {r['generated_at'][:10]}")
+           f"{cv['n_splits'] * cv['n_repeats']} outer folds · nested report commit {n['git']['commit'][:7]}")
 cards([
-    ("ROC-AUC", f"{dep['roc_auc']['mean']:.3f}", f"± {dep['roc_auc']['std']:.3f} · ranking quality"),
-    ("PR-AUC", f"{dep['pr_auc']['mean']:.3f}", f"± {dep['pr_auc']['std']:.3f} · base rate {r['data']['base_rate']:.3f}"),
-    ("Brier score", f"{dep['brier']['mean']:.4f}", f"± {dep['brier']['std']:.4f} · calibrated PD, lower is better"),
-    ("Decision threshold", fmt_pd(thr["chosen"]), f"missed default = {thr['cost_ratio_fn_to_fp']}× false alarm"),
-    ("Recall at threshold", f"{thr['at_chosen']['recall']['mean']:.0%}",
-     f"± {thr['at_chosen']['recall']['std']:.0%} · defaults caught"),
-    ("Precision at threshold", f"{thr['at_chosen']['precision']['mean']:.0%}",
-     f"± {thr['at_chosen']['precision']['std']:.0%} · flags that defaulted"),
+    ("ROC-AUC", f"{nm['roc_auc']['mean']:.3f}", f"± {nm['roc_auc']['std']:.3f} · ranking quality"),
+    ("PR-AUC", f"{nm['pr_auc']['mean']:.3f}", f"± {nm['pr_auc']['std']:.3f} · base rate {r['data']['base_rate']:.3f}"),
+    ("Brier score", f"{nm['brier']['mean']:.4f}", f"± {nm['brier']['std']:.4f} · calibrated PD, lower is better"),
+    ("Deployed threshold", fmt_pd(deployed["threshold"]),
+     f"missed default = {deployed['cost_ratio_fn_to_fp']}× false alarm"),
+    ("Recall at threshold", f"{nm['recall_at_threshold']['mean']:.0%}",
+     f"± {nm['recall_at_threshold']['std']:.0%} · defaults caught"),
+    ("Precision at threshold", f"{nm['precision_at_threshold']['mean']:.0%}",
+     f"± {nm['precision_at_threshold']['std']:.0%} · flags that defaulted"),
 ])
+st.dataframe(pd.DataFrame([
+    {"Decision rule (nested)": "Uncalibrated monotone XGBoost at 0.50",
+     "Precision": f"{nm['uncalibrated_precision_at_0_50']['mean']:.0%}",
+     "Recall": f"{nm['uncalibrated_recall_at_0_50']['mean']:.0%}"},
+    {"Decision rule (nested)": "Calibrated model at the cost-based threshold",
+     "Precision": f"{nm['precision_at_threshold']['mean']:.0%}", "Recall": f"{nm['recall_at_threshold']['mean']:.0%}"},
+]), hide_index=True, use_container_width=True)
 
-st.subheader("Model comparison")
+st.subheader("Model comparison (non-nested, fixed notebook hyperparameters)")
 names = {"logistic_regression": "Logistic regression", "random_forest": "Random forest",
          "xgboost_unconstrained": "XGBoost, unconstrained", "xgboost_monotone": "XGBoost, monotone"}
 rows = [{"Model": "Altman Z (1968), as −Z", "ROC-AUC": pm(r["altman_z_benchmark"]["roc_auc"]),
@@ -47,7 +58,7 @@ st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 left, right = st.columns(2, gap="large")
 with left:
-    st.subheader("Calibration")
+    st.subheader("Calibration (non-nested run)")
     def nonzero(b):  # a decile with zero observed defaults has no point on a log axis
         pts = [(x, y) for x, y in zip(b["mean_predicted"], b["observed"]) if y > 0]
         return [p[0] for p in pts], [p[1] for p in pts]
@@ -70,21 +81,23 @@ with left:
                f"{pm(r['models']['xgboost_monotone']['brier'], 4)} before. Bins with zero defaults can't be drawn "
                "on a log axis. Rule for choosing the method: " + r["calibration"]["rule"] + ".")
 with right:
-    st.subheader("Risk grades")
-    g = pd.DataFrame(r["grades"])
+    st.subheader("Risk grades (rank-ordered)")
+    g = pd.DataFrame(n["grades"]).rename(columns={"mean_predicted_pd": "mean_pd"})
     fig = go.Figure()
     fig.add_trace(go.Bar(x=g.grade, y=g.observed_default_rate, name="Observed default rate",
                          marker_color=[GRADE_COLORS[x] for x in g.grade]))
     fig.add_trace(go.Scatter(x=g.grade, y=g.mean_pd, name="Mean predicted PD", mode="markers",
                              marker=dict(color="#E5EAF3", size=10, symbol="diamond", line=dict(color=BORDER))))
-    fig.update_layout(template=TEMPLATE, height=360, title="Default rate rises with grade (out-of-fold)",
+    fig.update_layout(template=TEMPLATE, height=360, title="Observed default rate rises with grade (nested, out-of-fold)",
                       yaxis=dict(tickformat=".0%"))
     plot(fig)
     st.dataframe(pd.DataFrame({"Grade": g.grade, "PD band": [f"< {m:.0%}" for m in g.max_pd],
                                "Firm-predictions": g.n, "Defaults": g.defaults,
-                               "Observed": g.observed_default_rate.map(lambda v: f"{v:.1%}"),
-                               "Mean PD": g.mean_pd.map(lambda v: f"{v:.1%}")}),
+                               "Mean predicted PD": g.mean_pd.map(lambda v: f"{v:.1%}"),
+                               "Observed rate": g.observed_default_rate.map(lambda v: f"{v:.1%}")}),
                  hide_index=True, use_container_width=True)
+    st.caption("Grades are rank-ordered: each grade's observed default rate is higher than the one before. "
+               "That is not a calibration claim, so predicted and observed rates are shown side by side.")
 
 st.subheader("Monotone constraints")
 cost = r["constraint_cost"]
@@ -105,7 +118,7 @@ st.markdown("""
 - **Old, single-market data.** Taiwanese listed companies, 1999–2009, collected from the Taiwan Economic Journal; bankruptcy as defined by Taiwan Stock Exchange business regulations ([UCI dataset 572](https://archive.ics.uci.edu/dataset/572/taiwanese+bankruptcy+prediction)). Accounting rules, rates and industries have changed since; there is no out-of-time or out-of-country test.
 - **Not a credit decision tool.** A portfolio demo for learning. PDs are relative to this dataset's base rate, not a regulatory PD.
 - **Pre-normalised inputs.** The ratios were already scaled to 0–1 by the data provider, so inputs are not raw accounting numbers, and the stress shocks are approximations.
-- **Slight optimism.** XGBoost hyperparameters were tuned in the original notebook on a split that overlaps these CV folds, and the threshold is chosen on the same out-of-fold predictions it is evaluated on.
+- **Nested CV is the honest estimate.** The headline numbers re-run hyperparameter search, calibration choice and threshold choice inside every outer training fold. The non-nested comparison table reuses the notebook's hyperparameters and is slightly optimistic.
 - **Counterfactuals hold other ratios fixed.** Real changes move several ratios at once.
 """)
 for c in r["caveats"]:

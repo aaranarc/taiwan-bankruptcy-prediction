@@ -58,6 +58,7 @@ def summarise(values):
 
 
 def main():
+    provenance = git_info()  # captured before the run: the code state the numbers come from
     x, y = load_data()
     policy = load_config("risk_policy.json")
     cost_ratio, grades = policy["cost_ratio_fn_to_fp"], policy["grades"]
@@ -85,7 +86,7 @@ def main():
         "label": "NESTED CV: tuning, calibration choice and threshold choice all happen inside each outer training fold",
         "generated_by": "training/nested_cv.py",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "git": git_info(),
+        "git": provenance,
         "outer_cv": {"scheme": "RepeatedStratifiedKFold", "n_splits": N_SPLITS, "n_repeats": N_REPEATS, "seed": SEED,
                      "same_splits_as": "training/cv_evaluate.py"},
         "inner": {"hyperparameter_grid": GRID, "search": "inner 3-fold CV, score = PR-AUC",

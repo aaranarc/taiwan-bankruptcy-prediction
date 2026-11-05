@@ -104,11 +104,11 @@ The reliability plot uses a log scale, so decile bins with *zero* observed defau
 
 0.50 is only right if a missed default and a false alarm cost the same. With a 10:1 cost ratio, we pick the PD threshold that minimises `10·(missed defaults) + 1·(false alarms)` on the pooled out-of-fold PDs: **0.15**. Theory says that for perfectly calibrated PDs the answer is 1/(1+10) ≈ 0.091, so the empirical value is in the right neighbourhood.
 
-At 0.15: precision 30.8%, recall 70.9%. At 0.50 the calibrated model flags **no** firms (recall 0.0%): with a 3% base rate, an honest PD almost never reaches 50%. The threshold is in every `/predict` response (`threshold`, `flagged`).
+At 0.15: precision 30.8%, recall 70.9% (non-nested run). The threshold is in every `/predict` response (`threshold`, `flagged`). The nested-CV section below re-chooses it inside every training fold and compares it with the uncalibrated model at 0.50.
 
 ### 4. Risk grades A–E
 
-Grades are PD bands set in `config/risk_policy.json` *before* looking at results: A < 1%, B < 3%, C < 10%, D < 30%, E the rest. The check that matters is that the observed default rate rises with the grade: A 0.3% → B 3.0% → C 5.2% → D 13.4% → E 41.9%. It does, and the mean PD in each grade is close to its observed rate (another calibration check).
+Grades are PD bands set in `config/risk_policy.json` *before* looking at results: A < 1%, B < 3%, C < 10%, D < 30%, E the rest. The check that matters is that the observed default rate rises with the grade: A 0.3% → B 3.0% → C 5.2% → D 13.4% → E 41.9%. It does, so the grades are **rank-ordered**. That isn't a calibration claim: within a band the predicted and observed rates can differ (the README and Model card show them side by side), so say "rank-ordered", not "calibrated grades".
 
 ### 5. Counterfactual "path to safety" (`POST /predict/counterfactual`)
 
@@ -148,11 +148,11 @@ AUC only measures ranking. Pricing, provisioning and a cost-based threshold need
 **Q: How do you calibrate without leaking?**
 The calibrator is fitted on out-of-fold predictions *within* the training fold, and the outer test fold is only used for scoring.
 
-**Q: Why is your threshold 0.15 and not 0.5?**
-Because a missed default is assumed to cost 10× a false alarm. With calibrated PDs, the cost-minimising cut-off is near 1/(1+10).
+**Q: Why isn't your threshold 0.5?**
+Because a missed default is assumed to cost 10× a false alarm. With calibrated PDs, the cost-minimising cut-off is near 1/(1+10); the actual value is chosen from out-of-fold predictions inside each training fold.
 
 **Q: How do you know the grades work?**
-Observed default rates rise strictly from A to E on out-of-fold predictions, and each grade's mean PD is close to its observed rate.
+They're rank-ordered: observed default rates rise strictly from A to E on nested out-of-fold predictions. I show mean predicted PD next to the observed rate for each grade rather than claiming the bands are calibrated.
 
 **Q: Isn't a counterfactual just gaming the model?**
 It's bounded to ratios management can change, within ranges the model has seen, in the direction the constraints guarantee is safer. It's a conversation starter for an analyst, not advice.

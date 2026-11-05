@@ -85,6 +85,9 @@ def test_grade_boundaries(pd_value, grade):
     assert grade_for(pd_value, GRADES) == grade
 
 
-def test_api_threshold_comes_from_cv_report():
-    with open(f"{ROOT}/reports/metrics.json") as fh:
-        assert model_service.threshold == json.load(fh)["threshold"]["chosen"]
+def test_api_threshold_comes_from_the_trained_procedure():
+    """The served threshold is the one the training procedure chose (reports/deployed_model.json)."""
+    with open(f"{ROOT}/reports/deployed_model.json") as fh:
+        deployed = json.load(fh)
+    assert model_service.threshold == deployed["threshold"]
+    assert model_service.meta["calibration_method"] == deployed["calibration_method"]
