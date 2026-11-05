@@ -32,10 +32,6 @@ class PredictionResponse(BaseModel):
     risk_tier: str
     risk_emoji: str
     risk_color: str
-    altman_z_score: Optional[float] = None
-    altman_zone: Optional[str] = None
-    altman_emoji: Optional[str] = None
-    altman_color: Optional[str] = None
     top_factors: Optional[List[TopFactor]] = None
     cached: bool
 
@@ -93,11 +89,7 @@ def predict(
                         "prediction": cached_data["prediction"],
                         "risk_tier": cached_data["risk_tier"],
                         "risk_emoji": cached_data["risk_emoji"],
-                        "risk_color": cached_data["risk_color"],
-                        "altman_z_score": cached_data.get("altman_z_score"),
-                        "altman_zone": cached_data.get("altman_zone"),
-                        "altman_emoji": cached_data.get("altman_emoji"),
-                        "altman_color": cached_data.get("altman_color")
+                        "risk_color": cached_data["risk_color"]
                     }
                 }).execute()
             except Exception as e:
@@ -130,11 +122,7 @@ def predict(
                     "prediction": res["prediction"],
                     "risk_tier": res["risk_tier"],
                     "risk_emoji": res["risk_emoji"],
-                    "risk_color": res["risk_color"],
-                    "altman_z_score": res.get("altman_z_score"),
-                    "altman_zone": res.get("altman_zone"),
-                    "altman_emoji": res.get("altman_emoji"),
-                    "altman_color": res.get("altman_color")
+                    "risk_color": res["risk_color"]
                 }
             }).execute()
             logger.info(f"Log prediction to Supabase for user: {current_user['email']}")

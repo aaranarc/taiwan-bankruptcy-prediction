@@ -110,50 +110,12 @@ class ModelService:
             risk_emoji = '🔴'
             risk_color = '#ef4444'
 
-        # Compute Altman Z-Score if features are present
-        altman_z = None
-        altman_zone = None
-        altman_emoji = None
-        altman_color = None
-
-        altman_features = {
-            'X1': 'Working Capital to Total Assets',
-            'X2': 'Retained Earnings to Total Assets',
-            'X3': 'ROA(B) before interest and depreciation after tax',
-            'X4': 'Net worth/Assets',
-            'X5': 'Total Asset Turnover',
-        }
-        altman_coeffs = {'X1': 1.2, 'X2': 1.4, 'X3': 3.3, 'X4': 0.6, 'X5': 1.0}
-
-        try:
-            if all(col in features for col in altman_features.values()):
-                z = sum(altman_coeffs[k] * features[altman_features[k]] for k in altman_features)
-                altman_z = float(z)
-                if altman_z > 2.99:
-                    altman_zone = 'Safe'
-                    altman_emoji = '🟢'
-                    altman_color = '#10b981'
-                elif altman_z > 1.81:
-                    altman_zone = 'Grey'
-                    altman_emoji = '🟡'
-                    altman_color = '#f59e0b'
-                else:
-                    altman_zone = 'Distress'
-                    altman_emoji = '🔴'
-                    altman_color = '#ef4444'
-        except Exception as e:
-            logger.warning(f"Error computing Altman Z-Score: {e}")
-
         return {
             "probability": prob,
             "prediction": pred,
             "risk_tier": risk_tier,
             "risk_emoji": risk_emoji,
             "risk_color": risk_color,
-            "altman_z_score": altman_z,
-            "altman_zone": altman_zone,
-            "altman_emoji": altman_emoji,
-            "altman_color": altman_color,
             "top_factors": top_factors,
         }
 

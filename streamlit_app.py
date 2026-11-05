@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import requests
+import json
 import os
 
 # Page Config
@@ -146,15 +147,26 @@ st.markdown(
 # ── PAGE: OVERVIEW ──
 if page == "🏠 Overview":
     st.markdown("### Model Performance & Dataset overview")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown('<div class="metric-card"><p class="metric-value">95.1%</p><p class="metric-label">ROC-AUC Score</p></div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown('<div class="metric-card"><p class="metric-value">47.1%</p><p class="metric-label">PR-AUC Score</p></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown('<div class="metric-card"><p class="metric-value">6,819</p><p class="metric-label">Dataset Size</p></div>', unsafe_allow_html=True)
-    with col4:
-        st.markdown('<div class="metric-card"><p class="metric-value">95</p><p class="metric-label">Model Features</p></div>', unsafe_allow_html=True)
+    # Every number here is read from reports/metrics.json (written by training/cv_evaluate.py).
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports", "metrics.json")) as fh:
+            metrics = json.load(fh)
+    except (OSError, ValueError):
+        metrics = None
+    if metrics:
+        xgb = metrics["models"]["xgboost"]
+        cv = metrics["cv"]
+        cards = [
+            (f'{xgb["roc_auc"]["mean"]:.3f} ± {xgb["roc_auc"]["std"]:.3f}', "ROC-AUC (CV)"),
+            (f'{xgb["pr_auc"]["mean"]:.3f} ± {xgb["pr_auc"]["std"]:.3f}', "PR-AUC (CV)"),
+            (f'{metrics["data"]["rows"]:,}', "Dataset Size"),
+            (f'{metrics["data"]["features"]}', "Model Features"),
+        ]
+        for col, (value, label) in zip(st.columns(4), cards):
+            col.markdown(f'<div class="metric-card"><p class="metric-value">{value}</p><p class="metric-label">{label}</p></div>', unsafe_allow_html=True)
+        st.caption(f'Mean ± std over {cv["n_repeats"]}×{cv["n_splits"]} repeated stratified cross-validation.')
+    else:
+        st.warning("reports/metrics.json not found. Run `python -m training.cv_evaluate` to generate metrics.")
 
     st.markdown("---")
     
@@ -174,12 +186,9 @@ if page == "🏠 Overview":
     with right:
         st.markdown("#### Baseline Comparison")
         st.markdown("""
-        The system compares predictions against the **Altman Z-Score (1968)**, a classic formula for predicting bankruptcy.
-        
-        **Altman Zone Boundaries:**
-        - **Safe Zone:** Z-Score > 2.99
-        - **Grey Zone:** 1.81 < Z-Score ≤ 2.99
-        - **Distress Zone:** Z-Score ≤ 1.81
+        The model is benchmarked against the **Altman Z-Score (1968)** by ranking quality (ROC-AUC) only.
+        The dataset's ratios are normalised to 0–1, so the classic Safe / Grey / Distress cut-offs
+        (2.99 / 1.81) do not apply and are not shown. See the README for the benchmark numbers.
         """)
 
 # ── PAGE: AUTHENTICATION ──
@@ -315,46 +324,22 @@ elif page in ["🔍 Predict Bankruptcy", "🔍 Predict (Guest Mode)"]:
                 else:
                     st.info("⚙️ Model Inference: Computed by XGBoost model")
 
-                # Columns for comparison
-                col_ml, col_altman = st.columns(2)
+                color = res["risk_color"]
+                emoji = res["risk_emoji"]
+                risk = res["risk_tier"]
+                prob = res["probability"]
                 
-                with col_ml:
-                    color = res["risk_color"]
-                    emoji = res["risk_emoji"]
-                    risk = res["risk_tier"]
-                    prob = res["probability"]
-                    
-                    st.markdown(
-                        f'<div class="prediction-result" style="text-align:center;">'
-                        f'<p style="color:#94a3b8;font-size:0.95rem;margin-bottom:0.5rem;text-transform:uppercase;">XGBoost Predictor Probability</p>'
-                        f'<p style="font-size:3.5rem;font-weight:800;color:{color};margin:0;">'
-                        f'{prob*100:.2f}%</p>'
-                        f'<p class="risk-badge" style="background:{color}20;color:{color};">'
-                        f'{emoji} {risk}</p>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-                    
-                with col_altman:
-                    if res.get("altman_z_score") is not None:
-                        alt_color = res["altman_color"]
-                        alt_emoji = res["altman_emoji"]
-                        alt_zone = res["altman_zone"]
-                        alt_z = res["altman_z_score"]
-                        
-                        st.markdown(
-                            f'<div class="prediction-result" style="text-align:center;">'
-                            f'<p style="color:#94a3b8;font-size:0.95rem;margin-bottom:0.5rem;text-transform:uppercase;">Altman Z-Score</p>'
-                            f'<p style="font-size:3.5rem;font-weight:800;color:{alt_color};margin:0;">'
-                            f'{alt_z:.3f}</p>'
-                            f'<p class="risk-badge" style="background:{alt_color}20;color:{alt_color};">'
-                            f'{alt_emoji} {alt_zone}</p>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.warning("Altman Z-Score features were not fully supplied.")
-
+                st.markdown(
+                    f'<div class="prediction-result" style="text-align:center;">'
+                    f'<p style="color:#94a3b8;font-size:0.95rem;margin-bottom:0.5rem;text-transform:uppercase;">XGBoost Predictor Probability</p>'
+                    f'<p style="font-size:3.5rem;font-weight:800;color:{color};margin:0;">'
+                    f'{prob*100:.2f}%</p>'
+                    f'<p class="risk-badge" style="background:{color}20;color:{color};">'
+                    f'{emoji} {risk}</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                
                 if res.get("top_factors"):
                     st.markdown("#### Top factors behind this prediction (SHAP)")
                     st.dataframe(pd.DataFrame(res["top_factors"]), use_container_width=True, hide_index=True)
@@ -386,8 +371,6 @@ elif page == "📂 Prediction History":
                         "Date": pd.to_datetime(entry["created_at"]).strftime("%Y-%m-%d %H:%M:%S"),
                         "Risk Tier": res_obj.get("risk_tier", "Unknown"),
                         "Probability": f"{res_obj.get('probability', 0)*100:.2f}%",
-                        "Altman Z": f"{res_obj.get('altman_z_score', 0):.3f}" if res_obj.get('altman_z_score') is not None else "N/A",
-                        "Altman Zone": res_obj.get("altman_zone", "N/A"),
                     })
                 
                 df_hist = pd.DataFrame(records)
