@@ -26,7 +26,8 @@ class RedisCache:
             self.client.ping()
             logger.info("Successfully connected to Redis.")
         except Exception as e:
-            logger.warning(f"Could not connect to Redis: {e}. Caching will be disabled.")
+            # Exception text includes the host; log only its type.
+            logger.warning(f"Could not connect to Redis ({type(e).__name__}). Caching will be disabled.")
             self.client = None
 
     def get(self, key: str) -> Optional[Any]:
@@ -37,7 +38,7 @@ class RedisCache:
             if val:
                 return json.loads(val)
         except Exception as e:
-            logger.warning(f"Redis get error: {e}")
+            logger.warning(f"Redis get error ({type(e).__name__})")
         return None
 
     def set(self, key: str, value: Any, expire_seconds: int = 86400) -> bool:
@@ -47,7 +48,7 @@ class RedisCache:
             self.client.setex(key, expire_seconds, json.dumps(value))
             return True
         except Exception as e:
-            logger.warning(f"Redis set error: {e}")
+            logger.warning(f"Redis set error ({type(e).__name__})")
             return False
 
     def is_connected(self) -> bool:

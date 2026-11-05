@@ -130,3 +130,16 @@ def test_redis_round_trip_with_working_client():
     cache = redis_module.RedisCache.__new__(redis_module.RedisCache)
     cache.client = MemoryRedis()
     assert cache.set("k", {"pd": 0.1}) is True and cache.get("k") == {"pd": 0.1} and cache.is_connected()
+
+
+def test_redis_failure_log_does_not_reveal_host(monkeypatch, caplog):
+    """A managed Redis URL names the host (and may embed a password); neither may reach the logs."""
+    monkeypatch.setattr(redis_module.settings, "REDIS_URL", "rediss://user:pw@secret-host.example.invalid:6379")
+
+    def refuse(*a, **k):
+        raise ConnectionError("Error -2 connecting to secret-host.example.invalid:6379")
+
+    monkeypatch.setattr(redis_module.redis.Redis, "from_url", staticmethod(refuse))
+    with caplog.at_level("WARNING"):
+        redis_module.RedisCache()
+    assert "secret-host" not in caplog.text and "pw" not in caplog.text

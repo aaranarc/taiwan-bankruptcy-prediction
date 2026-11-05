@@ -26,3 +26,5 @@ coverage.xml
 
 # Vercel CLI link (project/org ids)
 .vercel/
+.vercel
+.env*

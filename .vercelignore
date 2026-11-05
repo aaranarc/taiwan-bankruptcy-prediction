@@ -3,6 +3,7 @@
 .git/
 **/__pycache__/
 .env
+.env.*
 data/
 docs/
 tests/

@@ -1,9 +1,10 @@
 """Fit the deployed model on all data and write its artifacts to app/models/.
 
-Run training/cv_evaluate.py first: this script reads the calibration method and the cost-based threshold
-that the cross-validation chose (reports/metrics.json), so no decision is made on the final training data.
+Runs training/procedure.py (hyperparameter search, calibration choice, cost threshold, final fit) once on all rows:
+the same procedure that training/nested_cv.py evaluates, so the nested CV numbers describe this model.
+Its choices are written to reports/deployed_model.json and app/models/model_meta.json.
 
-Usage: python -m training.cv_evaluate && python -m training.train_model
+Usage: python -m training.train_model
 """
 import json
 import os
@@ -12,12 +13,10 @@ from datetime import datetime, timezone
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler
-from xgboost import XGBClassifier
 
 from app.services.risk import apply_linked, load_config, monotone_tuple
+from training.procedure import fit_procedure
 from training.train_utils import ROOT, apply_winsorization, get_extreme_columns, git_info, load_data
 
 MODELS_DIR = os.path.join(ROOT, 'app', 'models')
@@ -30,20 +29,14 @@ OBSOLETE = ['feature_quantiles.pkl', 'xgb_final_model.pkl', 'best_params.pkl', '
 def main():
     x, y = load_data()
     policy = load_config('risk_policy.json')
-    with open(os.path.join(ROOT, 'reports', 'metrics.json')) as fh:
-        metrics = json.load(fh)
-    method, threshold = metrics['calibration']['chosen_method'], metrics['threshold']['chosen']
 
     # Same preprocessing as in CV, now fitted on all rows (train and "test" are the same frame here).
     x_w, _, bounds = apply_winsorization(x, x, get_extreme_columns(x))
     scaler = RobustScaler().fit(x_w)
     x_s = pd.DataFrame(scaler.transform(x_w), columns=x.columns)
 
-    base = XGBClassifier(**policy['xgb_params'], monotone_constraints=monotone_tuple(list(x.columns)),
-                         scale_pos_weight=(y == 0).sum() / (y == 1).sum(), random_state=SEED,
-                         eval_metric='logloss')
-    model = CalibratedClassifierCV(base, method=method, cv=StratifiedKFold(5, shuffle=True, random_state=SEED),
-                                   ensemble=False).fit(x_s, y)
+    fit = fit_procedure(x_s, y, monotone_tuple(list(x.columns)), policy['cost_ratio_fn_to_fp'])
+    model, method, threshold = fit['model'], fit['method'], fit['threshold']
 
     # Percentiles 0..100 of the raw training data: bounds for counterfactuals and stress tests.
     # Saved as plain JSON, not a pickled DataFrame: pandas 3 pickles string labels as pyarrow objects,
@@ -53,8 +46,10 @@ def main():
     meta = {
         'trained_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
         'git': git_info(),
-        'metrics_commit': metrics['git']['commit'],
+        'procedure': 'training/procedure.py (evaluated by training/nested_cv.py)',
+        'xgb_params': fit['params'],
         'calibration_method': method,
+        'isotonic_brier_gain': fit['isotonic_brier_gain'],
         'threshold': threshold,
         'cost_ratio_fn_to_fp': policy['cost_ratio_fn_to_fp'],
         'grades': policy['grades'],
@@ -74,6 +69,8 @@ def main():
         json.dump(quantiles, fh)
     with open(os.path.join(MODELS_DIR, 'model_meta.json'), 'w') as fh:
         json.dump(meta, fh, indent=2)
+    with open(os.path.join(ROOT, 'reports', 'deployed_model.json'), 'w') as fh:  # read by the README and Model card
+        json.dump({**meta, 'search_scores_pr_auc': fit['search_scores_pr_auc']}, fh, indent=2)
 
     # UI demo inputs. Presets are the feature-wise medians of each class (not real firms).
     presets = {}
