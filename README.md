@@ -22,7 +22,38 @@ More screenshots (desktop and phone width) are in [docs/verification/screenshots
 ## Model Performance
 
 <!-- metrics:start -->
-5×5 repeated stratified cross-validation on all 6,819 firms (220 bankrupt, base rate 3.2%). Values are mean ± std over 25 test folds; preprocessing, calibration and everything else are fitted inside each training fold. The old README used one 80/20 split with only 44 bankrupt firms in its test set.
+All 6,819 firms (220 bankrupt, base rate 3.2%), 5×5 repeated stratified cross-validation, mean ± std over 25 test folds. The old README used one 80/20 split with only 44 bankrupt firms in its test set.
+
+### Headline: nested cross-validation (after)
+
+Every choice is made inside each outer training fold: hyperparameter search (inner 3-fold CV, score = PR-AUC), calibration method (isotonic only if its mean paired Brier gain over sigmoid exceeds the std of that gain (inner 5-fold)) and the 10:1 cost-based threshold. Each outer test fold is scored once. The deployed model is produced by the same procedure (`training/procedure.py`) run on all data.
+
+| Deployed procedure, nested CV | ROC-AUC | PR-AUC | Brier |
+|-------------------------------|---------|--------|-------|
+| Monotone XGBoost, tuned + calibrated inside each fold | 0.942 ± 0.012 | 0.464 ± 0.072 | 0.0229 ± 0.0019 |
+
+| Decision rule (nested, same outer folds) | Precision | Recall | Firms flagged |
+|------------------------------------------|-----------|--------|---------------|
+| Uncalibrated monotone XGBoost at 0.50 | 46.1% ± 10.9% | 51.6% ± 14.4% | — |
+| Calibrated model at the fold's cost-based threshold (mean 0.073) | 29.9% ± 5.8% | 72.4% ± 7.8% | 8.2% ± 2.1% |
+
+Calibration method chosen: isotonic in 11 of 25 folds, sigmoid in 14 of 25 folds. Deployed model (`reports/deployed_model.json`): isotonic calibration, threshold 0.105, max_depth 5, learning_rate 0.05, 600 trees.
+
+**Risk grades are rank-ordered, not a calibration claim.** Out-of-fold, nested:
+
+| Grade | PD band | Firm-predictions | Defaults | Mean predicted PD | Observed default rate |
+|-------|---------|------------------|----------|-------------------|-----------------------|
+| A | < 1% | 16,988 | 42 | 0.3% | 0.2% |
+| B | < 3% | 12,848 | 189 | 1.6% | 1.5% |
+| C | < 10% | 1,999 | 147 | 5.5% | 7.4% |
+| D | < 30% | 1,146 | 176 | 17.0% | 15.4% |
+| E | < 100% | 1,114 | 546 | 51.7% | 49.0% |
+
+Observed default rate rises with every grade: **yes**. Counts pool all 5 repeats, so each firm appears 5 times.
+
+### Before: non-nested comparison
+
+Hyperparameters fixed from the original notebook (tuned on a split that overlaps these folds), so these rows are slightly optimistic. Kept for the model comparison and the cost of the monotone constraints.
 
 | Model | ROC-AUC | PR-AUC | Brier | Recall @ 0.50 (uncalibrated) |
 |-------|---------|--------|-------|------------------------------|
@@ -31,23 +62,9 @@ More screenshots (desktop and phone width) are in [docs/verification/screenshots
 | Random Forest (balanced weights) | 0.940 ± 0.012 | 0.426 ± 0.062 | 0.0256 ± 0.0021 | 36.8% ± 5.7% |
 | XGBoost + `scale_pos_weight`, unconstrained | 0.941 ± 0.012 | 0.439 ± 0.068 | 0.0693 ± 0.0045 | 79.9% ± 6.5% |
 | XGBoost + `scale_pos_weight`, monotone constraints | 0.941 ± 0.011 | 0.436 ± 0.062 | 0.0746 ± 0.0049 | 81.3% ± 5.6% |
-| **Monotone-constrained XGBoost + sigmoid calibration (deployed)** | **0.941 ± 0.011** | **0.436 ± 0.062** | **0.0236 ± 0.0010** | see threshold below |
+| Monotone-constrained XGBoost + sigmoid calibration | 0.941 ± 0.011 | 0.436 ± 0.062 | 0.0236 ± 0.0010 | — |
 
-**Cost of the monotone constraints** (19 features, `config/monotone_constraints.json`), paired by fold: ROC-AUC +0.0003 (± 0.0017), PR-AUC -0.0030 (± 0.0250). The raw Brier score is not comparable before calibration because `scale_pos_weight` inflates probabilities.
-
-**Calibration:** sigmoid (rule: isotonic only if its mean paired Brier gain over sigmoid exceeds the std of that gain). Brier score of the calibrated PD 0.0236 ± 0.0010 vs 0.0746 ± 0.0049 uncalibrated. Reliability plot: `reports/calibration.png`.
-
-**Decision threshold:** 0.150, the PD that minimises expected cost when a missed default costs 10× a false alarm (theory for perfectly calibrated PDs: 0.091). At this threshold: precision 30.8% ± 3.0%, recall 70.9% ± 6.6%, 7.5% ± 0.9% of firms flagged. At 0.50 the calibrated model catches 0.0% ± 0.0% of defaults.
-
-| Grade | PD band | Firm-predictions | Defaults | Observed default rate | Mean predicted PD |
-|-------|---------|------------------|----------|-----------------------|-------------------|
-| A | < 1% | 26,034 | 77 | 0.3% | 0.4% |
-| B | < 3% | 2,798 | 84 | 3.0% | 1.7% |
-| C | < 10% | 2,059 | 107 | 5.2% | 5.8% |
-| D | < 30% | 1,791 | 240 | 13.4% | 18.6% |
-| E | < 100% | 1,413 | 592 | 41.9% | 38.6% |
-
-Grades rank risk in order: **yes**. Counts pool all 5 repeats, so each firm appears 5 times.
+**Cost of the monotone constraints** (19 features, `config/monotone_constraints.json`), paired by fold: ROC-AUC +0.0003 (± 0.0017), PR-AUC -0.0030 (± 0.0250). Calibration: sigmoid; reliability plot `reports/calibration.png`.
 
 > **Altman Z-Score:** Ratios are 0-1 normalised in this dataset, so Z values and the 1.81/2.99 zones are not interpretable; only the ranking (AUC) is reported. Lower Z means more risk, so the score is negated before computing AUC.
 >
@@ -56,10 +73,10 @@ Grades rank risk in order: **yes**. Counts pool all 5 repeats, so each firm appe
 > **Caveat:** Grade boundaries are policy (config/risk_policy.json); grade counts pool all 5 repeats, so each firm appears 5 times.
 > **Caveat:** Recall at a fixed 0.50 threshold is not comparable across uncalibrated models; compare ROC-AUC / PR-AUC.
 
-<sub>Generated by `python -m training.render_readme` from `reports/metrics.json` (`training/cv_evaluate.py`, commit `f211501`, 2026-11-05T07:43:05+00:00).</sub>
+<sub>Generated by `python -m training.render_readme` from `reports/metrics.json` (non-nested: commit `f211501`, 2026-11-05T07:43:05+00:00; nested: commit `3602ed9`, 2026-11-05T09:53:32+00:00) and `reports/deployed_model.json`.</sub>
 <!-- metrics:end -->
 
-Reproduce: `python -m training.cv_evaluate && python -m training.train_model && python -m training.render_readme`. What changed and why: [docs/LEARNING.md](docs/LEARNING.md).
+Reproduce: `python -m training.cv_evaluate && python -m training.nested_cv && python -m training.train_model && python -m training.render_readme`. What changed and why: [docs/LEARNING.md](docs/LEARNING.md).
 
 ### API
 
@@ -67,7 +84,7 @@ Reproduce: `python -m training.cv_evaluate && python -m training.train_model && 
 |----------|------|-----------------|
 | `POST /predict` | JWT | Calibrated PD, grade A–E, the cost-based `threshold` and `flagged`, top-10 SHAP factors (log-odds) for a waterfall. Cached in Redis, logged to Supabase. |
 | `POST /predict/batch` | JWT | PD, grade and top-3 factors for up to 500 firms (portfolio upload). |
-| `POST /predict/counterfactual` | JWT | Smallest change to 1–3 adjustable ratios (bounded to the training data's 1st–99th percentile) that reaches a target grade. |
+| `POST /predict/counterfactual` | JWT | Smallest change to 1–3 adjustable ratios (bounded to the training data's 1st–99th percentile) that reaches a target grade. Severe-risk (grade E) firms usually have no such path; the response then says `reachable: false`. |
 | `POST /predict/stress` | JWT | PD before and after shocks; lists every ratio each shock touched. |
 | `GET /predict/history` | JWT | The user's past predictions from Supabase. |
 | `GET /meta` | none | Grades, threshold, adjustable ratios and stress shocks (policy only, no secrets). |

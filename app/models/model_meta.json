@@ -1,12 +1,23 @@
 {
-  "trained_at": "2026-11-05T07:50:43+00:00",
+  "trained_at": "2026-11-05T09:43:25+00:00",
   "git": {
-    "commit": "072b636acd44d8e4b26bf5cf7f7bd30358407d2e",
-    "dirty": true
+    "commit": "3602ed93d276b8fb465ce10baba3923feaeca9b1",
+    "dirty": false
   },
-  "metrics_commit": "f211501926ba2712d59720ee53d9db4b9b2f6365",
-  "calibration_method": "sigmoid",
-  "threshold": 0.15,
+  "procedure": "training/procedure.py (evaluated by training/nested_cv.py)",
+  "xgb_params": {
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "n_estimators": 600,
+    "subsample": 0.7,
+    "colsample_bytree": 0.9
+  },
+  "calibration_method": "isotonic",
+  "isotonic_brier_gain": {
+    "mean": 0.0013396343800172502,
+    "std": 0.0007060876756544469
+  },
+  "threshold": 0.105,
   "cost_ratio_fn_to_fp": 10,
   "grades": [
     {

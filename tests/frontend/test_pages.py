@@ -111,8 +111,8 @@ def test_model_card_reads_report():
     at = page("ui/pages/model_card.py", signed_in=False)
     assert not at.exception
     with open(ROOT / "reports" / "metrics.json") as fh:
-        auc = json.load(fh)["deployed_model"]["roc_auc"]["mean"]
-    assert f"{auc:.3f}" in html_text(at)  # card value comes straight from the report
+        auc = json.load(fh)["nested"]["metrics"]["roc_auc"]["mean"]
+    assert f"{auc:.3f}" in html_text(at)  # headline card shows the nested result straight from the report
     assert len(at.get("plotly_chart")) == 2  # calibration + grades
 
 

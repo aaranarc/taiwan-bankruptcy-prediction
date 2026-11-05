@@ -104,11 +104,11 @@ The reliability plot uses a log scale, so decile bins with *zero* observed defau
 
 0.50 is only right if a missed default and a false alarm cost the same. With a 10:1 cost ratio, we pick the PD threshold that minimises `10·(missed defaults) + 1·(false alarms)` on the pooled out-of-fold PDs: **0.15**. Theory says that for perfectly calibrated PDs the answer is 1/(1+10) ≈ 0.091, so the empirical value is in the right neighbourhood.
 
-At 0.15: precision 30.8%, recall 70.9%. At 0.50 the calibrated model flags **no** firms (recall 0.0%): with a 3% base rate, an honest PD almost never reaches 50%. The threshold is in every `/predict` response (`threshold`, `flagged`).
+At 0.15: precision 30.8%, recall 70.9% (non-nested run). The threshold is in every `/predict` response (`threshold`, `flagged`). The nested-CV section below re-chooses it inside every training fold and compares it with the uncalibrated model at 0.50.
 
 ### 4. Risk grades A–E
 
-Grades are PD bands set in `config/risk_policy.json` *before* looking at results: A < 1%, B < 3%, C < 10%, D < 30%, E the rest. The check that matters is that the observed default rate rises with the grade: A 0.3% → B 3.0% → C 5.2% → D 13.4% → E 41.9%. It does, and the mean PD in each grade is close to its observed rate (another calibration check).
+Grades are PD bands set in `config/risk_policy.json` *before* looking at results: A < 1%, B < 3%, C < 10%, D < 30%, E the rest. The check that matters is that the observed default rate rises with the grade: A 0.3% → B 3.0% → C 5.2% → D 13.4% → E 41.9%. It does, so the grades are **rank-ordered**. That isn't a calibration claim: within a band the predicted and observed rates can differ (the README and Model card show them side by side), so say "rank-ordered", not "calibrated grades".
 
 ### 5. Counterfactual "path to safety" (`POST /predict/counterfactual`)
 
@@ -148,11 +148,11 @@ AUC only measures ranking. Pricing, provisioning and a cost-based threshold need
 **Q: How do you calibrate without leaking?**
 The calibrator is fitted on out-of-fold predictions *within* the training fold, and the outer test fold is only used for scoring.
 
-**Q: Why is your threshold 0.15 and not 0.5?**
-Because a missed default is assumed to cost 10× a false alarm. With calibrated PDs, the cost-minimising cut-off is near 1/(1+10).
+**Q: Why isn't your threshold 0.5?**
+Because a missed default is assumed to cost 10× a false alarm. With calibrated PDs, the cost-minimising cut-off is near 1/(1+10); the actual value is chosen from out-of-fold predictions inside each training fold.
 
 **Q: How do you know the grades work?**
-Observed default rates rise strictly from A to E on out-of-fold predictions, and each grade's mean PD is close to its observed rate.
+They're rank-ordered: observed default rates rise strictly from A to E on nested out-of-fold predictions. I show mean predicted PD next to the observed rate for each grade rather than claiming the bands are calibrated.
 
 **Q: Isn't a counterfactual just gaming the model?**
 It's bounded to ratios management can change, within ranges the model has seen, in the direction the constraints guarantee is safer. It's a conversation starter for an analyst, not advice.
@@ -246,3 +246,46 @@ Using statements as of the fiscal year end when they were only published months 
 
 **Q: Why match healthy firms by sector and size?**
 So the model isn't rewarded for simply spotting "small steel company", but matching also inflates AUC compared with the real population. The plan says so next to every number.
+
+
+---
+
+## Nested cross-validation: the honest estimate
+
+*Numbers from `reports/metrics.json` → `nested` (commit `3602ed9`, clean tree) and `reports/deployed_model.json`.*
+
+**The problem it fixes.** The earlier numbers reused hyperparameters tuned in the notebook on data that overlaps the test folds, and picked the threshold on the same predictions they scored. Both leak a little information from test to train, so the results look slightly better than reality.
+
+**What nested CV does.** It uses two loops. The *outer* 5×5 loop only scores. Inside each outer training fold, `training/procedure.py` makes **every** choice from that fold alone:
+1. search 8 XGBoost settings (inner 3-fold CV, scored by PR-AUC);
+2. pick isotonic or sigmoid calibration with the documented rule;
+3. choose the 10:1 cost threshold from inner out-of-fold PDs;
+4. refit.
+
+Then the untouched outer test fold is scored once. The deployed model is that same function run on all data, so the nested numbers describe what's actually served.
+
+**Results:** ROC-AUC 0.942, PR-AUC 0.464, Brier 0.0229. The non-nested fixed-parameter model had PR-AUC 0.436, so honest tuning didn't cost anything here; it found a better setting (most folds chose depth 5, learning rate 0.05, 600 trees). The threshold chosen per fold varied a lot (mean 0.073, std 0.043). That's a real finding: with about 176 defaulters per training fold, the cost-optimal cut-off is noisy.
+
+**Calibrated vs uncalibrated decision rule** (same outer folds):
+- uncalibrated monotone XGBoost at 0.50: precision 46.1%, recall 51.6%;
+- calibrated PD at the fold's cost threshold: precision 29.9%, recall 72.4%.
+
+The cost rule trades precision for catching more defaults, which is what a 10:1 cost ratio asks for.
+
+**Grades are rank-ordered.** The observed default rate rises with every grade on nested out-of-fold predictions. That's the claim. "Calibrated grades" is not, so predicted and observed rates are shown side by side.
+
+**A trade-off this exposed: path to safety.** The deployed model (isotonic calibration, depth 5, 600 trees) spreads risk over many more features than the old shallow model. For grade-E (severe) firms, changing **three** adjustable ratios within the training range is usually not enough to reach grade D. The counterfactual then honestly reports "no path within 3 ratios; structural change needed", instead of inventing one. Firms in grades C and D still get paths. The decision was to keep the better-evaluated model and say this plainly, rather than tune the model to make the demo look better.
+
+### Interview questions
+
+**Q: What is nested cross-validation, and why do you need it?**
+If you tune hyperparameters (or a threshold) with CV and then report that same CV score, you've selected the best-looking result, which is optimistic. Nested CV puts the whole tuning procedure inside an outer loop, so each outer test fold is never used for any choice.
+
+**Q: Which number goes on your resume, nested or non-nested?**
+Nested, because it estimates how the *procedure* performs on unseen data, and it's the procedure that produced the deployed model.
+
+**Q: Your threshold varied a lot across folds. Is that a problem?**
+It's information. With few defaulters, the cost-optimal cut-off is noisy, which is why I'd report a range and monitor flag rates in production rather than treat one number as exact.
+
+**Q: Why does the better model give fewer "paths to safety"?**
+A deeper model uses more features, so any 3 ratios explain less of a firm's risk. For a firm at roughly 80% PD, that's arguably the honest answer: a few ratio tweaks don't make it safe.

@@ -243,6 +243,11 @@ def main():
         'grades': grade_rows,
         'grades_rank_risk_in_order': grades_rank_correctly,
     }
+    if os.path.exists(OUT):  # keep the nested-CV block (it has its own git commit and timestamp)
+        with open(OUT) as fh:
+            previous = json.load(fh)
+        if 'nested' in previous:
+            report['nested'] = previous['nested']
     with open(OUT, 'w') as fh:
         json.dump(report, fh, indent=2)
     print(f"Wrote {OUT} and {PLOT}")

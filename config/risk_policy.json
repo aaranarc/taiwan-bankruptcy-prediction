@@ -3,7 +3,7 @@
   "xgb_params": {
     "colsample_bytree": 0.9, "learning_rate": 0.01, "max_depth": 3, "n_estimators": 300, "subsample": 0.7
   },
-  "xgb_params_source": "Hyperparameters of the previously deployed model (app/models/best_params.pkl), tuned in the notebook on an 80/20 split; kept fixed so the constrained/unconstrained comparison isolates the effect of the constraints.",
+  "xgb_params_source": "Used ONLY by training/cv_evaluate.py (the non-nested comparison rows). The deployed model is tuned by training/procedure.py inside nested CV. Original note: hyperparameters of the previously deployed model (app/models/best_params.pkl), tuned in the notebook on an 80/20 split; kept fixed so the constrained/unconstrained comparison isolates the effect of the constraints.",
   "cost_ratio_fn_to_fp": 10,
   "cost_ratio_doc": "A missed default (false negative) costs this many times a false alarm (false positive).",
   "grades": [
