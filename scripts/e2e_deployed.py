@@ -50,11 +50,11 @@ def main(url: str, label: str, idle: int) -> None:
         page.get_by_text("No score yet").wait_for(timeout=120000)  # page load also wakes the API via /meta
         result["page_ready_seconds"] = round(time.perf_counter() - start, 2)
 
-        email = f"e2e-{uuid.uuid4().hex[:8]}@example.com"
+        email, password = f"e2e-{uuid.uuid4().hex[:8]}@example.com", uuid.uuid4().hex
         sidebar = page.locator('[data-testid="stSidebar"]')
         sidebar.get_by_role("tab", name="Create account").click()
         sidebar.locator('input[aria-label="Email"]').last.fill(email)
-        sidebar.locator('input[type="password"]').last.fill(uuid.uuid4().hex)
+        sidebar.locator('input[type="password"]').last.fill(password)
         sidebar.get_by_role("button", name="Create account").click()
         sidebar.get_by_text("Signed in as").wait_for(timeout=60000)
         result["signup"] = "ok"
@@ -63,6 +63,19 @@ def main(url: str, label: str, idle: int) -> None:
         page.get_by_role("button", name="Distressed firm").click()
         time.sleep(idle)  # let the API container scale down so the next call is a cold start
         result["idle_seconds_before_first_score"] = idle
+        if idle >= 290:
+            # Longer than the web function's 300 s max duration: the WebSocket session is gone, as it would be
+            # for a returning user. Reload (this also wakes the API via /meta), sign in again, then score.
+            start = time.perf_counter()
+            page.goto(url)
+            page.get_by_text("No score yet").wait_for(timeout=180000)
+            result["page_ready_after_idle_seconds"] = round(time.perf_counter() - start, 2)
+            result["session_survived_idle"] = False
+            sidebar.locator('input[aria-label="Email"]').first.fill(email)
+            sidebar.locator('input[type="password"]').first.fill(password)
+            sidebar.get_by_role("button", name="Sign in").click()
+            sidebar.get_by_text("Signed in as").wait_for(timeout=60000)
+            page.get_by_role("button", name="Distressed firm").click()
         page.get_by_role("button", name="Score company").click()
         page.get_by_text("Path to safety").first.wait_for(timeout=180000)
         result["first_score_after_idle_seconds"], result["first_score_source"] = latency(page)
