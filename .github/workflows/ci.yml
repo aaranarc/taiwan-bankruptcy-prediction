@@ -68,5 +68,6 @@ jobs:
           done
           docker logs api
           python3 -c "import json; m = json.load(open('meta.json')); assert m['threshold'] > 0, m; print('threshold', m['threshold'], 'model', m['model_version'])"
+          docker images bankruptcy-api --format 'Image size: {{.Size}}'  # in the log too (summaries aren't in the API)
           echo "### Docker" >> "$GITHUB_STEP_SUMMARY"
           docker images bankruptcy-api --format 'Image size: {{.Size}}' >> "$GITHUB_STEP_SUMMARY"
