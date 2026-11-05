@@ -45,7 +45,9 @@ ALTMAN = {
 def git_info():
     def run(*args):
         return subprocess.run(['git', *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    return {'commit': run('rev-parse', 'HEAD'), 'dirty': bool(run('status', '--porcelain'))}
+    # This script's own outputs are excluded: 'dirty' means the *code* differs from the commit.
+    dirty = run('status', '--porcelain', '--', '.', ':!reports', ':!README.md')
+    return {'commit': run('rev-parse', 'HEAD'), 'dirty': bool(dirty)}
 
 
 def models(xgb_params, scale_pos_weight):
@@ -119,6 +121,14 @@ def main():
                'seed': SEED, 'bankrupt_per_test_fold': summarise(bankrupt_per_test_fold)},
         'old_single_split': {'test_rows': int(len(y_old_test)), 'test_bankrupt': int(y_old_test.sum())},
         'threshold': THRESHOLD,
+        'caveats': [
+            'XGBoost hyperparameters come from app/models/best_params.pkl, tuned on the old 80% train split, '
+            'which overlaps these CV test folds, so the XGBoost row is slightly optimistic (no nested CV).',
+            'best_params.pkl values are not in the training/train_model.py grid; the deployed model was '
+            'likely tuned in the notebook.',
+            'Recall at a fixed 0.50 threshold is not comparable across models whose probabilities are on '
+            'different scales; compare ROC-AUC / PR-AUC.',
+        ],
         'xgboost_params': {**xgb_params, 'scale_pos_weight': 'n_negative / n_positive of each training fold'},
         'models': {name: {m: summarise(v) for m, v in s.items()} for name, s in scores.items()},
         'altman_z_benchmark': {
