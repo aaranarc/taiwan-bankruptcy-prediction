@@ -1,0 +1,24 @@
+{
+  "url": "https://taiwan-bankruptcy-prediction.vercel.app",
+  "target": "production",
+  "checked_at": "2026-11-05T10:38:25+00:00",
+  "health": {
+    "status": "ok",
+    "interface": "streamlit",
+    "api_binding_configured": true,
+    "commit": "5c96db86a643fadb8cf5530e828616fbfe4a2125"
+  },
+  "api_publicly_reachable": false,
+  "page_ready_seconds": 2.89,
+  "signup": "ok",
+  "test_user_email": "e2e-45a681bc@example.com",
+  "idle_seconds_before_first_score": 330,
+  "page_ready_after_idle_seconds": 14.44,
+  "session_survived_idle": false,
+  "first_score_after_idle_seconds": 1.06,
+  "first_score_source": "model",
+  "grade": "Grade E \u00b7 Severe risk",
+  "second_score_seconds": 0.99,
+  "second_score_source": "model",
+  "history_rows_read_back_from_supabase": 2
+}
