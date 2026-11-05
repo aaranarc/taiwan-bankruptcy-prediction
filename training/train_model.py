@@ -60,6 +60,7 @@ def main():
         'n_rows': int(len(y)),
     }
     os.makedirs(MODELS_DIR, exist_ok=True)
+    os.makedirs(UI_DIR, exist_ok=True)
     for name in OBSOLETE:
         path = os.path.join(MODELS_DIR, name)
         if os.path.exists(path):
