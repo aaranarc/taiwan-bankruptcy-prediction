@@ -95,9 +95,12 @@ def stress(features: dict, score, quantiles: pd.DataFrame, policy: dict, grades:
         for col in spec['columns']:
             if spec['kind'] == 'relative':
                 shocked[col] = shocked[col] * (1 + amount / 100)
-            else:  # percentile_shift
-                shocked[col] = from_percentile(to_percentile(shocked[col].iloc[0], quantiles[col]) + amount,
-                                               quantiles[col])
+            else:  # percentile_shift, kept within P1-P99: P0/P100 are single extreme outliers, not a "shock"
+                current = shocked[col].iloc[0]
+                target = np.clip(to_percentile(current, quantiles[col]) + amount, 1.0, 99.0)
+                moved = from_percentile(target, quantiles[col])
+                # Never move against the shock (a firm already below P1 stays where it is).
+                shocked[col] = min(current, moved) if amount < 0 else max(current, moved)
     shocked = apply_linked(shocked, policy['linked_features'])
 
     touched, clipped = [], []

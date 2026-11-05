@@ -192,3 +192,35 @@ The cache wrapper swallows connection errors and returns a miss, and there are t
 
 **Q: What would you check before removing Render?**
 That a preview *and* production deployment both return a real prediction that's logged to Supabase. Then suspend Render first, so the step can be reversed, before deleting it.
+
+---
+
+## Phase 3: making the Streamlit UI look like a product
+
+**Theme first, CSS second.** Colours, fonts, borders, radius and chart palettes are set in `.streamlit/config.toml`: a deep navy/slate base with a single blue accent. `ui/styles.css` only does what the theme can't: it hides Streamlit's menu, toolbar, decoration bar and footer, and styles our own `cr-*` cards and badges. It targets Streamlit's `data-testid` attributes, which are stable because Streamlit's own tests depend on them, unlike the auto-generated CSS class names. Green, amber and red are used **only** for risk (grades, SHAP direction, flags), so colour always means something.
+
+**Structure.** `streamlit_app.py` only sets up the page and `st.navigation`. Each page is a small script in `ui/pages/`. Shared pieces (cards, badge, gauge, waterfall, path card) are in `ui/components.py`, and every Plotly chart uses the one template registered in `ui/theme.py`.
+
+**Design decisions you can explain:**
+- **The PD gauge gives each grade an equal-width band.** PD bands are very uneven (A is under 1%, E is 30–100%). On a linear 0–100% dial, grades A–C would share the first tenth. The needle is interpolated inside its band, and a white tick marks the decision threshold.
+- **The SHAP waterfall adds up exactly.** The API returns the base value, the top 10 contributions and "all other features" summed, so the bars land on the model's score. A test checks this to 0.001.
+- **The path-to-safety card reports percentiles** ("P91 → P16 of firms") as well as raw values, because the inputs are pre-normalised numbers that mean little on their own.
+- **Empty, loading and error states on every page**, plus "API responded in X s", which doubles as the cold-start measurement on Vercel.
+- **Phone width:** Streamlit stacks columns automatically; the CSS switches the card grid to two columns and tightens padding. Checked with real screenshots at 390 px.
+
+**Bugs the screenshots caught** (that's why you look at the real thing, not just tests):
+1. Chart labels were clipped on narrow screens.
+2. A stress test pushed a distressed firm's ROA to the single most extreme value in the data (the 0th percentile). Percentile shocks are now kept within P1–P99, and a regression test covers it.
+
+**Testing.** `tests/frontend/test_pages.py` uses Streamlit's `AppTest` to run each page headlessly. It clicks real buttons and checks session state, errors and the number of charts. The API client is replaced by an in-process fake that calls the *real* model, so the pages render real outputs without a server.
+
+### Interview questions
+
+**Q: Why Streamlit and not React?**
+The whole project is Python, and I can defend every line. Streamlit's theme config and a small CSS file are enough for a clean analyst tool, and the UI logic is still testable with AppTest.
+
+**Q: How do you test a Streamlit app?**
+`streamlit.testing.v1.AppTest` runs a script without a browser. You can set session state, click buttons and inspect the elements it produced. External calls are mocked at the module boundary (`ui.api`).
+
+**Q: Is the API URL visible to users?**
+No. Streamlit code runs on the server, and only rendered elements reach the browser. The one leak path is an error message, and those are sanitised and tested.

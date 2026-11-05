@@ -70,3 +70,13 @@ def test_profitability_shock_moves_down_by_percentiles(raw_features):
 def test_zero_shocks_change_nothing(raw_features):
     res = model_service.stress(raw_features, {"revenue_change_pct": 0, "debt_change_pct": 0})
     assert res["changed_features"] == [] and res["pd_after"] == pytest.approx(res["pd_before"])
+
+
+def test_profitability_shock_stops_at_first_percentile(dataset):
+    """A firm already near the bottom must not be pushed to the single most extreme value in the data."""
+    bankrupt = dataset[dataset["Bankrupt?"] == 1].drop(columns=["Bankrupt?"]).median()
+    firm = {k: float(v) for k, v in bankrupt.items()}
+    res = model_service.stress(firm, {"profitability_shift_pctile": -50})
+    q = model_service.artifacts["quantiles"]
+    for ch in res["changed_features"]:
+        assert ch["after"] >= q[ch["feature"]].loc[1] - 1e-12 or ch["after"] == ch["before"]

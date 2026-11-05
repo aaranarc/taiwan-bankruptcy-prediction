@@ -8,8 +8,8 @@
       "functions": {
         "api/index.py": {
           "maxDuration": 300,
-          "includeFiles": "{server.py,streamlit_app.py,ui/**,.streamlit/**,reports/**}",
-          "excludeFiles": "{app/**,config/**,training/**,tests/**,data/**,docs/**,assets/**,*.ipynb,.venv/**}"
+          "includeFiles": "{server.py,streamlit_app.py,ui/**,.streamlit/**,reports/**,config/**}",
+          "excludeFiles": "{app/**,scripts/**,training/**,tests/**,data/**,docs/**,assets/**,*.ipynb,.venv/**}"
         }
       },
       "bindings": [

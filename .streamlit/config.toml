@@ -1,0 +1,28 @@
+# Theme first; ui/styles.css only covers what the theme can't do. Keep server.py's env defaults in sync.
+# Palette: deep navy/slate base, one blue accent. Green/amber/red are reserved for risk (see ui/theme.py).
+[theme]
+base = "dark"
+primaryColor = "#5B8DEF"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#131C2E"
+textColor = "#E5EAF3"
+linkColor = "#8DB0F5"
+borderColor = "#22304A"
+dataframeBorderColor = "#22304A"
+dataframeHeaderBackgroundColor = "#131C2E"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+baseRadius = "0.6rem"
+showWidgetBorder = true
+chartCategoricalColors = ["#5B8DEF", "#8DB0F5", "#3E5C9A", "#A9B6CF", "#6B7A99"]
+
+[server]
+headless = true
+maxUploadSize = 4  # MB; Vercel functions reject request bodies over 4.5 MB
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

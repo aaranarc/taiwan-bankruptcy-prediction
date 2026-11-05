@@ -59,6 +59,10 @@ def meta() -> dict:
     return _request("GET", "meta")
 
 
+def features() -> list:
+    return _request("GET", "features")
+
+
 def predict(features: dict, token: str | None) -> dict:
     return _request("POST", "predict", token, json={"features": features})
 

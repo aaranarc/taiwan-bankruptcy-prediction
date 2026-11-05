@@ -1,21 +1,21 @@
-# Corporate Bankruptcy Prediction System
+# Corporate Bankruptcy Prediction: a credit-risk desk
 
-An XGBoost-powered corporate bankruptcy prediction system (class imbalance handled with `scale_pos_weight`, no resampling), benchmarked against the classical Altman Z-Score, interpreted with SHAP, utilizing Redis caching, and integrated with Supabase database for user authentication and prediction history logging.
+Probability-of-default (PD) model for listed companies, built on the UCI Taiwanese bankruptcy dataset (6,819 firms, 1999–2009). It's a **monotone-constrained XGBoost** (class imbalance handled with `scale_pos_weight`, no resampling), **calibrated** into a PD, with a **cost-based decision threshold**, **A–E risk grades**, SHAP explanations, a bounded **"path to safety"** counterfactual and **stress tests**. It's benchmarked against the Altman Z-Score. FastAPI + Streamlit, with JWT auth, Supabase logging and Redis caching. Python only.
 
-**[Live Demo Link](https://bankruptcy-predictor-ui.onrender.com/)**
+**Live demo (Render, rollback host):** <https://bankruptcy-predictor-ui.onrender.com/>. Vercel hosting is configured but not yet deployed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
-![Dashboard Screenshot](assets/asset.png)
+![Score page](docs/verification/screenshots/score_desktop.png)
+
+More screenshots (desktop and phone width) are in [docs/verification/screenshots](docs/verification/screenshots). Plain-English notes and interview Q&A: [docs/LEARNING.md](docs/LEARNING.md).
 
 ---
 
-## Architecture Overview
+## Architecture
 
-This decoupled application separates frontend presentation from model inference and database layers:
-
-- **Streamlit UI**: Pure presentation layer. Communicates with the backend exclusively via JSON HTTP APIs with JWT bearer authentication.
-- **FastAPI Backend**: Hosts the XGBoost classifier pipeline, handles password hashing and JWT validation, interacts with Supabase, and manages Redis caching.
-- **Redis Cache**: Caches predictions to bypass model inference for identical inputs.
-- **Supabase Postgres**: Stores hashed user credentials and historical predictions.
+- **Streamlit UI** (`streamlit_app.py` + `ui/`): five pages (Score a company, Portfolio upload, Stress test, Model card, History). It talks to the API only from the server side, through `ui/api.py`.
+- **FastAPI** (`app/`): model service (preprocess → calibrated XGBoost → grade → SHAP), counterfactual and stress scenarios (`app/services/scenarios.py`), JWT auth, Supabase logging, optional Redis cache.
+- **Hosting:** Vercel Services. Streamlit runs as a Python ASGI function, and the API as a private Container Runtime service reached through a service binding. Render (`render.yaml`) is kept as the rollback.
+- **Policy as reviewed config:** `config/monotone_constraints.json` (constraint directions with reasons) and `config/risk_policy.json` (cost ratio, grade bands, adjustable ratios, stress shocks).
 
 ---
 
@@ -78,37 +78,21 @@ Reproduce: `python -m training.cv_evaluate && python -m training.train_model && 
 ## Project Structure
 
 ```text
-app/
-├── __init__.py
-├── main.py                     # Entry point combining routers, middlewares, and CORS
-├── models/
-│   ├── model.joblib            # Serialized XGBoost ML model
-│   └── robust_scaler.pkl, winsorize_bounds.pkl, etc.
-├── api/
-│   ├── routes_predict.py       # Predict endpoints with Redis & Supabase prediction logging
-│   └── routes_auth.py          # /auth/signup & /auth/login with Supabase users
-├── core/
-│   ├── config.py               # Env var loading via dotenv
-│   ├── security.py             # Password hashing (bcrypt) & JWT token helpers
-│   ├── dependencies.py         # DB (Supabase client) and Current User retrieval
-│   └── exceptions.py           # Custom exception handler classes
-├── services/
-│   └── model_service.py        # Pipeline: load artifacts, winsorize, scale, predict, SHAP top factors
-├── middleware/
-│   └── logging_middleware.py   # Global HTTP request/response logging
-├── cache/
-│   └── redis_cache.py          # Redis client cache helper
-└── utils/
-    └── logger.py               # Clean stdout logging formatter
-streamlit_app.py                # Streamlit UI client
-training/
-├── __init__.py
-├── train_utils.py              # Winsorization & scaling helper functions
-├── train_model.py              # XGBoost training pipeline script (outputs to app/models/)
-├── cv_evaluate.py              # 5×5 repeated stratified CV → reports/metrics.json
-└── render_readme.py            # Writes the README metrics table from reports/metrics.json
-reports/metrics.json            # Every metric shown in the README and UI comes from here
-tests/                          # pytest: auth helpers, cache key, /predict (Supabase/Redis faked)
+app/                      FastAPI service (Docker image / Vercel container)
+├── api/                  routes_predict.py (predict, batch, counterfactual, stress, history, meta), routes_auth.py
+├── services/             model_service.py, risk.py (grades, cost threshold), scenarios.py (counterfactual, stress)
+├── core/ cache/ middleware/ utils/
+└── models/               calibrated model, scaler, winsor bounds, feature_quantiles.json, model_meta.json
+config/                   monotone_constraints.json, risk_policy.json (reviewed policy)
+training/                 cv_evaluate.py → reports/, train_model.py → app/models/, render_readme.py
+reports/                  metrics.json + calibration.png: every number in the README and UI comes from here
+streamlit_app.py          page config + navigation only
+ui/                       api.py (server-side client), components.py, theme.py (Plotly template), styles.css, pages/
+server.py, api/index.py   Streamlit as an ASGI app for Vercel
+vercel.json, Dockerfile   Vercel services (web + api container); render.yaml = rollback
+scripts/                  demo_api.py (in-memory DB, local only), screenshots.py
+tests/                    pytest: API contract, auth, model, scenarios; tests/frontend: AppTest + client
+docs/                     LEARNING.md, DEPLOYMENT.md, INDIA_BACKTEST_PLAN.md, verification/
 ```
 
 ---
@@ -156,3 +140,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 export BACKEND_URL="http://localhost:8000"
 streamlit run streamlit_app.py
 ```
+
+### 5. Tests, lint, retraining
+```bash
+ruff check . && pytest -q --cov=app --cov=ui
+python -m training.cv_evaluate && python -m training.train_model && python -m training.render_readme
+```
+
+No Supabase? `python -m scripts.demo_api` runs the real API with an in-memory database (local demo only).

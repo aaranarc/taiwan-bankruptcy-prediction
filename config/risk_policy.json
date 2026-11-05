@@ -50,7 +50,7 @@
     "profitability_shift_pctile": {
       "label": "Profitability drop (percentile points)", "kind": "percentile_shift", "min": -50, "max": 0, "default": -20,
       "columns": ["ROA(A) before interest and % after tax", "ROA(B) before interest and depreciation after tax", "ROA(C) before interest and depreciation before interest", "Net Income to Total Assets"],
-      "doc": "Profit ratios in this dataset are offset-normalised (about 0.5 = break-even), so a % change has no meaning; instead each is moved down this many percentile points of the training distribution."
+      "doc": "Profit ratios in this dataset are offset-normalised (about 0.5 = break-even), so a % change has no meaning; instead each is moved down this many percentile points of the training distribution, floored at the 1st percentile (P0 is a single extreme outlier)."
     }
   }
 }
