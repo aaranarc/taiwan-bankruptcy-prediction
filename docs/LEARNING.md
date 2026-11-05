@@ -67,3 +67,95 @@ With 220 bankrupt firms in total, a single test set holds only 44 of them. Repea
 
 **Q: Is standard deviation across CV folds a confidence interval?**
 Not exactly. Folds share training data, so they aren't independent and the std understates the true uncertainty a little. It's still a fair, honest indication of spread.
+
+
+---
+
+## Phase 1: making the model credit-risk grade
+
+*Numbers below are quoted from `reports/metrics.json` (commit `f211501`). If you rerun the pipeline, re-read that file.*
+
+Pipeline: `python -m training.cv_evaluate` (honest evaluation, picks the calibration method and the threshold) → `python -m training.train_model` (refits on all data, writes `app/models/`) → `python -m training.render_readme`.
+
+### 1. Monotone constraints
+
+A tree model can learn odd local wiggles, for example "debt ratio 0.31 is safer than 0.30". A credit officer can't defend that. XGBoost's `monotone_constraints` forbid it: for a feature marked +1, raising it may never lower the predicted risk. The list is in `config/monotone_constraints.json`. Each of the 19 features has a written reason, and the excluded ones have a reason too. For example, the "Interest Coverage Ratio" column is *excluded*: its name says "interest expense to EBIT", which is the inverse of coverage, so the direction can't be verified.
+
+**Cost:** paired by fold, ROC-AUC changed by +0.0003 and PR-AUC by -0.0030. Both are far smaller than the fold-to-fold noise (0.025 for PR-AUC). The constraints are essentially free here. The test `tests/test_model.py::test_pd_is_monotone_in_constrained_feature` sweeps every constrained feature on the final model and checks it.
+
+Why the direction survives preprocessing: winsorising (clipping) and RobustScaler ((x − median) / IQR) are both order-preserving, so "higher raw value" still means "higher model input".
+
+### 2. Calibration: turning a score into a PD
+
+`scale_pos_weight` makes the model treat each bankrupt firm as about 30 firms, so its raw "probabilities" are far too high (see the orange line in `reports/calibration.png`). Calibration fits a mapping from raw score to real frequency:
+
+- **Platt / sigmoid:** fits a logistic curve. It's strictly increasing, so the ranking (AUC) is unchanged.
+- **Isotonic:** fits any non-decreasing step function. It's more flexible, but it creates ties and needs more data.
+
+**No leakage:** inside each outer training fold, `CalibratedClassifierCV(cv=inner 5-fold, ensemble=False)` gets out-of-fold scores *from that training fold*, fits the calibrator on them, then refits the model on the whole training fold. The outer test fold is never touched.
+
+**Choice:** isotonic had a Brier score lower by only 0.00015 (std of the paired gain 0.00060), but it lost PR-AUC (0.399 vs 0.436). The first run picked isotonic by pure "lowest Brier". I changed the rule (it's written in the JSON) to "isotonic only if its gain beats the noise", so **sigmoid** is used. Say this openly in interviews: it's a decision made after seeing results, and it's justified because the gain was smaller than the noise.
+
+Brier score = mean of (PD − outcome)². Lower is better. Calibrated: 0.0236; uncalibrated monotone model: 0.0746. For reference, always predicting the base rate would give about 0.0312.
+
+The reliability plot uses a log scale, so decile bins with *zero* observed defaults can't be drawn. That's why fewer than 10 points appear.
+
+### 3. Cost-based threshold
+
+0.50 is only right if a missed default and a false alarm cost the same. With a 10:1 cost ratio, we pick the PD threshold that minimises `10·(missed defaults) + 1·(false alarms)` on the pooled out-of-fold PDs: **0.15**. Theory says that for perfectly calibrated PDs the answer is 1/(1+10) ≈ 0.091, so the empirical value is in the right neighbourhood.
+
+At 0.15: precision 30.8%, recall 70.9%. At 0.50 the calibrated model flags **no** firms (recall 0.0%): with a 3% base rate, an honest PD almost never reaches 50%. The threshold is in every `/predict` response (`threshold`, `flagged`).
+
+### 4. Risk grades A–E
+
+Grades are PD bands set in `config/risk_policy.json` *before* looking at results: A < 1%, B < 3%, C < 10%, D < 30%, E the rest. The check that matters is that the observed default rate rises with the grade: A 0.3% → B 3.0% → C 5.2% → D 13.4% → E 41.9%. It does, and the mean PD in each grade is close to its observed rate (another calibration check).
+
+### 5. Counterfactual "path to safety" (`POST /predict/counterfactual`)
+
+Question: "What is the smallest realistic change that would get this firm to grade C?" `app/services/scenarios.py` does a bounded grid search:
+- **Only levers management controls:** debt ratio, short-term liabilities, borrowing dependency, current ratio, cash, retained earnings (`adjustable_features` in the policy). Every lever is monotone-constrained, so we know which way is "safer".
+- **Bounded:** candidate values move only in the safer direction and stay between the 1st and 99th percentile of the training data. The model has never seen anything beyond that.
+- **Smallest:** fewest ratios first (1, then 2, then 3), then the smallest total move in percentile points. Percentiles make "0.01 of current ratio" and "0.01 of cash/assets" comparable.
+- **Linked ratios:** `Net worth/Assets = 1 − Debt ratio %` exactly in this data, so changing one updates the other.
+
+Limits to admit: the other ratios are held fixed, even though in reality paying down debt also changes cash. That's why it's a "path", not a plan.
+
+### 6. Stress test (`POST /predict/stress`)
+
+The shocks and the exact columns each one touches are listed in `config/risk_policy.json` and returned by `GET /meta`:
+- revenue −x% → total asset turnover and revenue per share scale by (1 − x)
+- interest cost +x% → interest-bearing debt interest rate scales by (1 + x)
+- debt +x% → debt ratio, debt/net worth and liability/equity scale up; net worth/assets = 1 − debt ratio
+- profitability → ROA and net-income ratios move down by N *percentile points*. These columns are offset-normalised (about 0.5 = break-even), so "−20%" would be meaningless for them.
+
+Results are clipped to the training range. The honest caveat: these are approximations on pre-normalised ratios, not an accounting model.
+
+### 7. Engineering changes worth knowing
+
+- **Exact version pins** (`requirements-api.txt`): a pickled scikit-learn model must be loaded by the version that saved it.
+- **The quantile table is saved as JSON**, not a pickle. pandas 3 pickled the column labels as pyarrow objects, and the API image (correctly) has no pyarrow. Only *running* the Docker image caught this, so CI now runs the image as well as building it.
+- **`xgboost-cpu` on Linux:** the same library without the ~300 MB CUDA dependency.
+- **Redis URL is never logged:** managed Redis URLs contain the password. The old code logged it on every start.
+
+### Interview questions
+
+**Q: What does a monotone constraint cost you, and how did you measure it?**
+The same 25 folds with and without constraints, compared fold by fold. The PR-AUC difference was -0.0030 with a standard deviation of 0.025, so there was no measurable cost.
+
+**Q: Why calibrate if AUC doesn't change?**
+AUC only measures ranking. Pricing, provisioning and a cost-based threshold need the *level* of the probability to be right.
+
+**Q: How do you calibrate without leaking?**
+The calibrator is fitted on out-of-fold predictions *within* the training fold, and the outer test fold is only used for scoring.
+
+**Q: Why is your threshold 0.15 and not 0.5?**
+Because a missed default is assumed to cost 10× a false alarm. With calibrated PDs, the cost-minimising cut-off is near 1/(1+10).
+
+**Q: How do you know the grades work?**
+Observed default rates rise strictly from A to E on out-of-fold predictions, and each grade's mean PD is close to its observed rate.
+
+**Q: Isn't a counterfactual just gaming the model?**
+It's bounded to ratios management can change, within ranges the model has seen, in the direction the constraints guarantee is safer. It's a conversation starter for an analyst, not advice.
+
+**Q: What is SHAP showing in the waterfall?**
+Each feature's contribution to the XGBoost log-odds *before* calibration. Calibration is a single increasing curve applied afterwards, so the order and sign of contributions still apply to the PD.

@@ -1,0 +1,25 @@
+{
+  "what": "Local Docker cold start of the API image (NOT a Vercel measurement)",
+  "machine": "Darwin arm64",
+  "git_commit_of_image_source": "072b636acd44d8e4b26bf5cf7f7bd30358407d2e",
+  "image_size": "1.13GB",
+  "seconds_from_docker_run_to_first_200": 1.58,
+  "warm_GET_meta_ms": [
+    1.2,
+    1.0,
+    1.0,
+    0.9,
+    0.9
+  ],
+  "note": "Container start + Python imports (xgboost, shap, pandas) + artifact load. Vercel adds image pull / VM start on top; measure there with the checklist in docs/DEPLOYMENT.md.",
+  "in_container_model_timings": {
+    "import_and_load_s": 0.9,
+    "first_predict_with_shap_ms": 20,
+    "second_predict_ms": 13,
+    "counterfactual_search_ms": 442,
+    "input": "ui/presets.json distressed preset",
+    "pd": 0.4302,
+    "grade": "E"
+  },
+  "in_container_model_timings_source": "docker run bankruptcy-api python -c <timed model_service calls>, piped straight into this file"
+}
