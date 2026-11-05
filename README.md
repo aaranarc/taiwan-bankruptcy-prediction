@@ -2,7 +2,7 @@
 
 Probability-of-default (PD) model for listed companies, built on the UCI Taiwanese bankruptcy dataset (6,819 firms, 1999–2009). It's a **monotone-constrained XGBoost** (class imbalance handled with `scale_pos_weight`, no resampling), **calibrated** into a PD, with a **cost-based decision threshold**, **A–E risk grades**, SHAP explanations, a bounded **"path to safety"** counterfactual and **stress tests**. It's benchmarked against the Altman Z-Score. FastAPI + Streamlit, with JWT auth, Supabase logging and Redis caching. Python only.
 
-**Live demo (Render, rollback host):** <https://bankruptcy-predictor-ui.onrender.com/>. Vercel hosting is configured but not yet deployed (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+**Live demo (Render, rollback host):** <https://taiwan-bankruptcy-prediction.vercel.app/>
 
 ![Score page](docs/verification/screenshots/score_desktop.png)
 
