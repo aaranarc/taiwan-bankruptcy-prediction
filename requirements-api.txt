@@ -1,0 +1,17 @@
+# FastAPI + model service (Docker image / Vercel container / Render API). Exact pins: the pickled model
+# and scaler must be loaded by the same scikit-learn/xgboost versions that trained them.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pandas==3.1.1
+numpy==2.4.6
+scikit-learn==1.9.1
+xgboost==3.0.5
+shap==0.51.0
+joblib==1.6.0
+redis==8.1.0
+supabase==2.34.0
+bcrypt==5.0.0
+PyJWT==2.15.1
+python-multipart==0.0.33
+python-dotenv==1.2.4
+email-validator==2.3.0

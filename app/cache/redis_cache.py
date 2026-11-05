@@ -1,6 +1,8 @@
 import json
-from typing import Optional, Any
+from typing import Any, Optional
+
 import redis
+
 from app.core.config import settings
 from app.utils.logger import get_logger
 
@@ -12,10 +14,14 @@ class RedisCache:
         self.connect()
 
     def connect(self):
-        logger.info(f"Connecting to Redis at {settings.REDIS_URL}...")
+        if not settings.REDIS_URL:
+            logger.info("REDIS_URL not set. Caching is disabled.")
+            return
+        # Never log the URL itself: managed Redis URLs embed the password.
+        logger.info("Connecting to Redis...")
         try:
             self.client = redis.Redis.from_url(
-                settings.REDIS_URL, decode_responses=True, socket_timeout=2.0
+                settings.REDIS_URL, decode_responses=True, socket_timeout=2.0, socket_connect_timeout=2.0
             )
             self.client.ping()
             logger.info("Successfully connected to Redis.")

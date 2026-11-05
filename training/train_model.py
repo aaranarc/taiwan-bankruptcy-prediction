@@ -1,135 +1,94 @@
+"""Fit the deployed model on all data and write its artifacts to app/models/.
+
+Run training/cv_evaluate.py first: this script reads the calibration method and the cost-based threshold
+that the cross-validation chose (reports/metrics.json), so no decision is made on the final training data.
+
+Usage: python -m training.cv_evaluate && python -m training.train_model
+"""
+import json
 import os
+from datetime import datetime, timezone
+
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import RobustScaler
 from xgboost import XGBClassifier
-import warnings
-warnings.filterwarnings('ignore')
 
-from training.train_utils import get_extreme_columns, apply_winsorization
+from app.services.risk import apply_linked, load_config, monotone_tuple
+from training.train_utils import ROOT, apply_winsorization, get_extreme_columns, git_info, load_data
+
+MODELS_DIR = os.path.join(ROOT, 'app', 'models')
+UI_DIR = os.path.join(ROOT, 'ui')
+SEED = 42
+OBSOLETE = ['xgb_final_model.pkl', 'best_params.pkl', 'test_metrics.pkl', 'shap_values_test.pkl',
+            'x_test.pkl', 'y_test.pkl']
+
 
 def main():
-    print("=" * 60)
-    print("Taiwan Bankruptcy Prediction — Model Training")
-    print("=" * 60)
+    x, y = load_data()
+    policy = load_config('risk_policy.json')
+    with open(os.path.join(ROOT, 'reports', 'metrics.json')) as fh:
+        metrics = json.load(fh)
+    method, threshold = metrics['calibration']['chosen_method'], metrics['threshold']['chosen']
 
-    # 1. Load data
-    data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raw', 'data.csv')
-    if not os.path.exists(data_path):
-        print(f"❌ Data file not found at {data_path}")
-        return
-        
-    df = pd.read_csv(data_path)
-    df.columns = df.columns.str.strip()
-    print(f"\n✅ Loaded data: {df.shape[0]} rows × {df.shape[1]} columns")
+    # Same preprocessing as in CV, now fitted on all rows (train and "test" are the same frame here).
+    x_w, _, bounds = apply_winsorization(x, x, get_extreme_columns(x))
+    scaler = RobustScaler().fit(x_w)
+    x_s = pd.DataFrame(scaler.transform(x_w), columns=x.columns)
 
-    # 2. Train/test split
-    x = df.drop(columns=['Bankrupt?'])
-    y = df['Bankrupt?']
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.2, stratify=y, random_state=42
-    )
-    print(f"\n✅ Train/test split: {x_train.shape[0]} train / {x_test.shape[0]} test")
+    base = XGBClassifier(**policy['xgb_params'], monotone_constraints=monotone_tuple(list(x.columns)),
+                         scale_pos_weight=(y == 0).sum() / (y == 1).sum(), random_state=SEED,
+                         eval_metric='logloss')
+    model = CalibratedClassifierCV(base, method=method, cv=StratifiedKFold(5, shuffle=True, random_state=SEED),
+                                   ensemble=False).fit(x_s, y)
 
-    # 3. Winsorization
-    extreme_cols = get_extreme_columns(x_train)
-    x_train, x_test, winsorize_bounds_dict = apply_winsorization(x_train, x_test, extreme_cols)
-    print(f"✅ Winsorized {len(extreme_cols)} columns with extreme outliers")
+    # Percentiles 0..100 of the raw training data: bounds for counterfactuals and stress tests.
+    quantiles = x.quantile(np.linspace(0, 1, 101))
+    quantiles.index = np.arange(101)
 
-    # 4. Scaling
-    scaler = RobustScaler()
-    x_train_scaled = scaler.fit_transform(x_train)
-    x_test_scaled = scaler.transform(x_test)
-
-    x_train = pd.DataFrame(x_train_scaled, columns=x.columns)
-    x_test = pd.DataFrame(x_test_scaled, columns=x.columns)
-    print("✅ RobustScaler fitted and applied")
-
-    # 5. GridSearchCV for XGBoost
-    print("\n🔍 Running GridSearchCV (this may take a few minutes)...")
-    param_grid = {
-        'n_estimators': [100, 200],
-        'learning_rate': [0.1, 0.2],
-        'max_depth': [3, 5],
-        'subsample': [0.9],
-        'colsample_bytree': [0.9]
+    meta = {
+        'trained_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'git': git_info(),
+        'metrics_commit': metrics['git']['commit'],
+        'calibration_method': method,
+        'threshold': threshold,
+        'cost_ratio_fn_to_fp': policy['cost_ratio_fn_to_fp'],
+        'grades': policy['grades'],
+        'n_rows': int(len(y)),
     }
-    xgb_model = XGBClassifier(random_state=42, eval_metric='logloss')
-
-    grid_search = GridSearchCV(
-        estimator=xgb_model,
-        param_grid=param_grid,
-        scoring='roc_auc',
-        cv=3,
-        verbose=1,
-        n_jobs=-1
-    )
-    grid_search.fit(x_train, y_train)
-
-    best_params = grid_search.best_params_
-    print(f"\n✅ Best parameters: {best_params}")
-    print(f"   Best ROC-AUC (CV): {grid_search.best_score_:.4f}")
-
-    # 6. Train final model with scale_pos_weight
-    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-
-    xgb = XGBClassifier(
-        **best_params,
-        scale_pos_weight=scale_pos_weight,
-        random_state=42,
-        eval_metric='logloss',
-    )
-    xgb.fit(x_train, y_train)
-
-    # Evaluation
-    from sklearn.metrics import roc_auc_score, average_precision_score, classification_report
-    xgb_prob = xgb.predict_proba(x_test)[:, 1]
-    xgb_pred = xgb.predict(x_test)
-    roc_auc = roc_auc_score(y_test, xgb_prob)
-    pr_auc = average_precision_score(y_test, xgb_prob)
-
-    print(f"\n✅ Final XGBoost model trained")
-    print(f"   ROC-AUC: {roc_auc:.4f}")
-    print(f"   PR-AUC:  {pr_auc:.4f}")
-
-    # 7. Compute SHAP values
-    print("🔍 Computing SHAP values for global feature importance...")
-    import shap
-    explainer = shap.TreeExplainer(xgb)
-    shap_values = explainer.shap_values(x_test)
-    print("✅ SHAP values computed")
-
-    # 8. Save all artifacts to app/models/
-    models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'app', 'models')
-    os.makedirs(models_dir, exist_ok=True)
-
-    artifacts = {
-        'xgb_final_model.pkl': xgb,
-        'model.joblib': xgb, # copy model to model.joblib
-        'robust_scaler.pkl': scaler,
-        'winsorize_bounds.pkl': winsorize_bounds_dict,
-        'feature_names.pkl': list(x.columns),
-        'best_params.pkl': best_params,
-        'test_metrics.pkl': {
-            'roc_auc': roc_auc,
-            'pr_auc': pr_auc,
-            'scale_pos_weight': scale_pos_weight,
-        },
-        'shap_values_test.pkl': shap_values,
-        'x_test.pkl': x_test,
-        'y_test.pkl': y_test,
-    }
-
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    for name in OBSOLETE:
+        path = os.path.join(MODELS_DIR, name)
+        if os.path.exists(path):
+            os.remove(path)
+    artifacts = {'model.joblib': model, 'robust_scaler.pkl': scaler, 'winsorize_bounds.pkl': bounds,
+                 'feature_names.pkl': list(x.columns), 'feature_quantiles.pkl': quantiles}
     for fname, obj in artifacts.items():
-        path = os.path.join(models_dir, fname)
-        joblib.dump(obj, path)
-        print(f"   Saved: {path}")
+        joblib.dump(obj, os.path.join(MODELS_DIR, fname))
+    with open(os.path.join(MODELS_DIR, 'model_meta.json'), 'w') as fh:
+        json.dump(meta, fh, indent=2)
 
-    print(f"\n{'=' * 60}")
-    print(f"✅ All artifacts saved to {models_dir}/")
-    print(f"{'=' * 60}")
+    # UI demo inputs. Presets are the feature-wise medians of each class (not real firms).
+    presets = {}
+    for name, label in (('Healthy firm (median of non-bankrupt)', 0), ('Distressed firm (median of bankrupt)', 1)):
+        row = apply_linked(x[y == label].median().to_frame().T, policy['linked_features']).iloc[0]
+        presets[name] = {c: float(v) for c, v in row.items()}
+    with open(os.path.join(UI_DIR, 'presets.json'), 'w') as fh:
+        json.dump(presets, fh, indent=1)
+    sample = x.sample(150, random_state=SEED)
+    sample.insert(0, 'firm_id', [f'TW-{i:04d}' for i in sample.index])
+    sample.to_csv(os.path.join(UI_DIR, 'sample_portfolio.csv'), index=False)
+
+    # Reload through the API's own loader: proves the saved artifacts work end to end.
+    from app.services.model_service import ModelService
+    service = ModelService()
+    for name, feats in presets.items():
+        res = service.predict(feats)
+        print(f"   preset {name!r}: PD {res['probability']:.4f}, grade {res['grade']}")
+    print(f"Saved model ({method} calibration, threshold {threshold}) and artifacts to {MODELS_DIR}")
 
 
 if __name__ == '__main__':

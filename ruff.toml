@@ -1,0 +1,6 @@
+line-length = 120
+extend-exclude = ["*.ipynb", ".venv"]
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

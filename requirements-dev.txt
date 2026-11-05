@@ -1,0 +1,8 @@
+# Training, tests and lint (local + CI). Not installed in any deployed service.
+-r requirements-api.txt
+-r requirements.txt
+matplotlib==3.11.2
+httpx==0.28.1
+pytest==9.2.0
+pytest-cov==7.1.0
+ruff==0.17.3
