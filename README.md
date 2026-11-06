@@ -5,8 +5,6 @@ Probability-of-default (PD) model for listed companies, built on the UCI Taiwane
 **Live demo:** <https://taiwan-bankruptcy-prediction.vercel.app/>
 
 ![Score page](docs/verification/screenshots/score_desktop.png)
-
-More screenshots (desktop and phone width) are in [docs/verification/screenshots](docs/verification/screenshots)
 ---
 
 ## Architecture
