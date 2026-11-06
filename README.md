@@ -4,7 +4,7 @@ Probability-of-default (PD) model for listed companies, built on the UCI Taiwane
 
 **Live demo:** <https://defaultpulse.vercel.app/>
 
-![DefaultPulse — live credit-risk scoring dashboard](docs/verification/screenshots/defaultpulse_desktop.png)
+![DefaultPulse — live credit-risk scoring dashboard](docs/verification/screenshots/defaultpulse-scoring-result.png)
 ---
 
 ## Architecture
