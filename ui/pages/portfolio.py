@@ -11,7 +11,7 @@ CHUNK = 250  # rows per API call; the API accepts up to 500 and Vercel caps bodi
 
 init_state()
 meta = get_meta()
-hero("Credit risk desk", "Portfolio upload",
+hero("DefaultPulse", "Portfolio upload",
      "Score a whole book at once. Upload a CSV with the model's 95 ratio columns (an optional firm_id column is "
      "kept as the label), or try the 150-firm sample.")
 

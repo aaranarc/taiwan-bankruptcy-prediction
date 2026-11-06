@@ -8,7 +8,7 @@ from ui.components import cards, empty_state, get_meta, hero, init_state, plot, 
 from ui.theme import ACCENT, MUTED, TEMPLATE, fmt_pd
 
 init_state()
-hero("Credit risk desk", "History", "Every company you have scored, newest first. Stored in Supabase, so it "
+hero("DefaultPulse", "History", "Every company you have scored, newest first. Stored in Supabase, so it "
      "survives sign-out and redeploys.")
 
 if require_sign_in("see your prediction history"):

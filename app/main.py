@@ -14,7 +14,7 @@ logger = get_logger("main")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Taiwan Bankruptcy Prediction API with Supabase and Redis integration.",
+    description="DefaultPulse corporate credit-risk scoring API with calibrated probabilities, SHAP explanations, and counterfactual stress testing.",
     version=settings.VERSION,
 )
 

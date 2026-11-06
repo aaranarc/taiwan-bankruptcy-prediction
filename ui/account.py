@@ -11,8 +11,8 @@ def _sign_in(token_response: dict) -> None:
 
 def sidebar_account() -> None:
     with st.sidebar:
-        st.html('<div class="cr-hero" style="margin-bottom:.4rem"><div class="cr-hero__eyebrow">Credit risk desk</div>'
-                '<div class="cr-hero__title" style="font-size:1.15rem">Bankruptcy PD model</div></div>')
+        st.html('<div class="cr-hero" style="margin-bottom:.4rem"><div class="cr-hero__eyebrow">Corporate credit risk</div>'
+                '<div class="cr-hero__title" style="font-size:1.15rem">DefaultPulse</div></div>')
         if st.session_state.get("token"):
             st.caption(f"Signed in as **{st.session_state.email}**")
             if st.button("Sign out", use_container_width=True):

@@ -23,7 +23,7 @@ from ui.inputs import current_firm, load_firm, render_inputs
 
 init_state()
 meta = get_meta()
-hero("Credit risk desk", "Score a company",
+hero("DefaultPulse", "Score a company",
      "Probability of default from a monotone-constrained, calibrated XGBoost model, with the reasons behind it "
      "and the smallest realistic path to a safer grade.")
 

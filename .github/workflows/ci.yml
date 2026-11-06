@@ -57,17 +57,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build API image
-        run: docker build -t bankruptcy-api .
+        run: docker build -t defaultpulse-api .
       - name: Run the image and wait for the model to load
         # Building is not enough: a missing runtime dependency only shows up when artifacts are unpickled.
         run: |
-          docker run -d --name api -p 8000:8000 -e JWT_SECRET_KEY=ci-only-not-a-secret bankruptcy-api
+          docker run -d --name api -p 8000:8000 -e JWT_SECRET_KEY=ci-only-not-a-secret defaultpulse-api
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8000/meta > meta.json; then break; fi
             sleep 1
           done
           docker logs api
           python3 -c "import json; m = json.load(open('meta.json')); assert m['threshold'] > 0, m; print('threshold', m['threshold'], 'model', m['model_version'])"
-          docker images bankruptcy-api --format 'Image size: {{.Size}}'  # in the log too (summaries aren't in the API)
+          docker images defaultpulse-api --format 'Image size: {{.Size}}'  # in the log too (summaries aren't in the API)
           echo "### Docker" >> "$GITHUB_STEP_SUMMARY"
-          docker images bankruptcy-api --format 'Image size: {{.Size}}' >> "$GITHUB_STEP_SUMMARY"
+          docker images defaultpulse-api --format 'Image size: {{.Size}}' >> "$GITHUB_STEP_SUMMARY"

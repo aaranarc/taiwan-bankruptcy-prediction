@@ -6,7 +6,7 @@ import streamlit as st
 from ui.components import cards, empty_state, hero, load_json, plot
 from ui.theme import ACCENT, BORDER, GRADE_COLORS, MUTED, RISK_AMBER, TEMPLATE
 
-hero("Credit risk desk", "Model card",
+hero("DefaultPulse", "Model card",
      "How the model was evaluated, how well its probabilities are calibrated, and where it should not be used. "
      "Every number on this page is read from reports/metrics.json and reports/deployed_model.json.")
 

@@ -4,7 +4,7 @@ import streamlit as st
 from ui.account import sidebar_account
 from ui.components import init_state, inject_css
 
-st.set_page_config(page_title="Credit Risk Desk", page_icon=":material/account_balance:", layout="wide")
+st.set_page_config(page_title="DefaultPulse | Credit-Risk Engine", page_icon=":material/account_balance:", layout="wide")
 inject_css()
 init_state()
 sidebar_account()

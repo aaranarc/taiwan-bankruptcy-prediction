@@ -11,7 +11,7 @@ from ui.theme import fmt_pd, fmt_ratio
 
 init_state()
 meta = get_meta()
-hero("Credit risk desk", "Stress test",
+hero("DefaultPulse", "Stress test",
      "Shock the firm you are editing on the Score page and see how its PD and grade move. Each shock touches only "
      "the ratios listed under it.")
 st.caption(f"Firm: **{st.session_state.firm_label}** with your edits from the Score page.")

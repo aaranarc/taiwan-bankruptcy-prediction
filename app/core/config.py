@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    PROJECT_NAME: str = "Taiwan Bankruptcy Prediction API"
+    PROJECT_NAME: str = "DefaultPulse API"
     VERSION: str = "2.0.0"
 
     # Supabase config

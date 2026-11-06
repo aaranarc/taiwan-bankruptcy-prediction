@@ -1,8 +1,8 @@
-# Corporate Bankruptcy Prediction: a credit-risk desk
+# DefaultPulse — Corporate Credit-Risk & Default Scoring Engine
 
 Probability-of-default (PD) model for listed companies, built on the UCI Taiwanese bankruptcy dataset (6,819 firms, 1999–2009). It's a **monotone-constrained XGBoost** (class imbalance handled with `scale_pos_weight`, no resampling), **calibrated** into a PD, with a **cost-based decision threshold**, **A–E risk grades**, SHAP explanations, a bounded **"path to safety"** counterfactual and **stress tests**. It's benchmarked against the Altman Z-Score. FastAPI + Streamlit, with JWT auth, Supabase logging and Redis caching. Python only.
 
-**Live demo:** <https://taiwan-bankruptcy-prediction.vercel.app/>
+**Live demo:** <https://defaultpulse.vercel.app/>
 
 ![Score page](docs/verification/screenshots/score_desktop.png)
 ---
